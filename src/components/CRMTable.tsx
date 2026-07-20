@@ -1,10 +1,9 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useI18n } from "../lib/i18n";
 import { 
-  Search, 
-  SlidersHorizontal, 
-  Edit3, 
-  Calendar, 
+  Search,
+  SlidersHorizontal,
+  Calendar,
   FileText, 
   CheckCircle, 
   AlertCircle, 
@@ -17,8 +16,6 @@ import {
   Mail,
   UserPlus,
   CloudUpload,
-  Plus,
-  Settings,
   X,
   AlertTriangle,
   MailCheck,
@@ -37,7 +34,6 @@ interface CRMTableProps {
   type: "batches" | "meetings";
   spreadsheetId: string;
   batchesData: BatchContact[];
-  meetingsData: MeetingRow[];
   selectedRowIndexes: number[];
   onSelectRowChange: (indexes: number[]) => void;
   onRefresh: () => void;
@@ -53,7 +49,6 @@ export default function CRMTable({
   type,
   spreadsheetId,
   batchesData,
-  meetingsData,
   selectedRowIndexes,
   onSelectRowChange,
   onRefresh,
@@ -74,13 +69,16 @@ export default function CRMTable({
   const [selectedRow, setSelectedRow] = useState<BatchContact | MeetingRow | null>(null);
 
   // Meetings now live natively on the Lead record. The "meetings" view derives its
-  // rows from batchesData (Leads with a suggested/booked meeting) instead of the
-  // legacy meetings sheet, so rowIndex still points at the correct row in "batches".
+  // rows from batchesData instead of the legacy meetings sheet, so rowIndex still
+  // points at the correct row in "batches". Only confirmed meetings count here —
+  // same criteria as the Home dashboard's "scheduled" metric — so this count stays
+  // consistent everywhere instead of also including merely suggested times.
   const meetingsFromLeads = useMemo<MeetingRow[]>(() => {
     return batchesData
-      .filter((b) => (b.suggestedTimes && b.suggestedTimes.trim()) || (b.bookedTime && b.bookedTime.trim()))
+      .filter((b) => b.statusMeetings === "Scheduled" || b.statusMeetings === "booked" || (b.bookedTime && b.bookedTime.trim()))
       .map((b) => ({
         rowIndex: b.rowIndex,
+        name: b.name || "",
         email: b.email || "",
         suggestedTimes: b.suggestedTimes || "",
         bookedTime: b.bookedTime || "",
@@ -155,10 +153,6 @@ export default function CRMTable({
   const [editedEmail, setEditedEmail] = useState(""); // For meetings email
   const [editedEmailSent, setEditedEmailSent] = useState(""); // For batches dispatch date
   const [saveSuccess, setSaveSuccess] = useState(false);
-
-  // States for Sidebar Drawers
-  const [showConfigDrawer, setShowConfigDrawer] = useState(false);
-  const [configTab, setConfigTab] = useState<"columns" | "stages">("columns");
 
   // Core pipeline stages definition
   const stages = useMemo(() => {
@@ -451,7 +445,8 @@ export default function CRMTable({
       }
 
       return data.filter((item) => {
-        const matchesSearch = 
+        const matchesSearch =
+          (item.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
           item.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
           item.notes.toLowerCase().includes(searchTerm.toLowerCase()) ||
           item.suggestedTimes.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -858,17 +853,6 @@ export default function CRMTable({
               )}
             </div>
 
-            {/* Config stages drawer button */}
-            <button
-              onClick={() => {
-                setConfigTab("stages");
-                setShowConfigDrawer(true);
-              }}
-              className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 border border-gray-200 flex items-center justify-center cursor-pointer"
-              title={locale === "pt" ? "Configurar estágios e colunas" : "Configure stages and columns"}
-            >
-              <Settings className="w-4 h-4 text-gray-600" />
-            </button>
           </div>
         </div>
 
@@ -898,16 +882,6 @@ export default function CRMTable({
                   ? "Não há contatos neste estágio ou que correspondam à sua pesquisa. Toque nos chevrons coloridos acima para mudar o filtro ou adicione leads."
                   : "There are no contacts in this stage or matching your search. Click on the colored chevrons above to change filters or add leads."}
               </p>
-              <button 
-                onClick={() => {
-                  setConfigTab("stages");
-                  setShowConfigDrawer(true);
-                }}
-                className="mt-4 flex items-center gap-1.5 border border-indigo-200 text-indigo-700 hover:bg-indigo-50 px-4 py-2 rounded-full text-xs font-semibold cursor-pointer transition-all"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>{locale === "pt" ? "Editar estágios/colunas" : "Edit stages/columns"}</span>
-              </button>
             </div>
           ) : (
             <table className="w-full text-left border-collapse min-w-[700px]">
@@ -939,6 +913,7 @@ export default function CRMTable({
                     </>
                   ) : (
                     <>
+                      <th className="py-2.5 px-4 border-r border-gray-200">{locale === "pt" ? "Nome do Lead" : "Lead Name"}</th>
                       <th className="py-2.5 px-4 border-r border-gray-200">{locale === "pt" ? "E-mail de Contato" : "Contact Email"}</th>
                       <th className="py-2.5 px-4 border-r border-gray-200">{locale === "pt" ? "Horários Sugeridos" : "Suggested Times"}</th>
                       <th className="py-2.5 px-4 border-r border-gray-200">{locale === "pt" ? "Horário Confirmado" : "Confirmed Time"}</th>
@@ -1014,6 +989,9 @@ export default function CRMTable({
                         </>
                       ) : (
                         <>
+                          <td className="py-2 px-4 font-medium text-gray-800 border-r border-gray-100">
+                            {(item as MeetingRow).name || "—"}
+                          </td>
                           <td className="py-2 px-4 font-semibold text-gray-900 border-r border-gray-100">
                             {(item as MeetingRow).email}
                           </td>
@@ -1501,160 +1479,6 @@ export default function CRMTable({
                     <span>{locale === "pt" ? "Planilha atualizada com sucesso!" : "Spreadsheet updated successfully!"}</span>
                   </motion.div>
                 )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* 4. Column & Stage Config Drawer */}
-        <AnimatePresence>
-          {showConfigDrawer && (
-            <motion.div
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="absolute top-0 right-0 w-full md:w-[380px] h-full bg-white border-l border-gray-200 shadow-2xl flex flex-col z-30 overflow-hidden"
-            >
-              {/* Drawer Header */}
-              <div className="p-5 bg-white border-b border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-base font-bold text-gray-800 flex items-center gap-1.5">
-                    <Settings className="w-5 h-5 text-indigo-500" />
-                    <span>{locale === "pt" ? "Configurações do CRM" : "CRM Settings"}</span>
-                  </h3>
-                  <button
-                    onClick={() => setShowConfigDrawer(false)}
-                    className="p-1 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Tabs */}
-                <div className="flex border-b border-gray-200">
-                  <button
-                    onClick={() => setConfigTab("columns")}
-                    className={`flex-1 text-center py-2 text-xs font-bold transition-all ${
-                      configTab === "columns" 
-                        ? "border-b-2 border-indigo-600 text-indigo-700" 
-                        : "text-gray-400 hover:text-gray-600"
-                    }`}
-                  >
-                    {locale === "pt" ? "Colunas" : "Columns"}
-                  </button>
-                  <button
-                    onClick={() => setConfigTab("stages")}
-                    className={`flex-1 text-center py-2 text-xs font-bold transition-all ${
-                      configTab === "stages" 
-                        ? "border-b-2 border-indigo-600 text-indigo-700" 
-                        : "text-gray-400 hover:text-gray-600"
-                    }`}
-                  >
-                    {locale === "pt" ? "Estágios" : "Stages"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Drawer Body content */}
-              <div className="flex-1 overflow-y-auto p-5 bg-gray-50/50">
-                {configTab === "columns" ? (
-                  <div className="flex flex-col gap-4">
-                    <div className="bg-white p-3 rounded-lg border border-gray-200 text-xs text-gray-500 font-medium">
-                      {locale === "pt" ? (
-                        <>Editando o <span className="font-bold text-indigo-600">Layout Padrão</span> para as colunas do seu CRM integrado.</>
-                      ) : (
-                        <>Editing the <span className="font-bold text-indigo-600">Standard Layout</span> for the columns of your integrated CRM.</>
-                      )}
-                    </div>
-                    
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider select-none">
-                      {locale === "pt" ? "COLUNAS ATIVAS" : "ACTIVE COLUMNS"}
-                    </span>
-
-                    <div className="flex flex-col gap-2">
-                      {(type === "batches" 
-                        ? (locale === "pt" 
-                            ? ["Linha #", "Universidade", "Organização Estudantil", "Nome do Aluno", "Status Pipeline", "Data do Envio", "Anotações (Notes)"] 
-                            : ["Row #", "University", "Student Organization", "Student Name", "Pipeline Status", "Date Sent", "Notes"])
-                        : (locale === "pt"
-                            ? ["Linha #", "E-mail de Contato", "Horários Sugeridos", "Horário Confirmado", "Status"]
-                            : ["Row #", "Contact Email", "Suggested Times", "Confirmed Time", "Status"])
-                      ).map((col, idx) => (
-                        <div 
-                          key={col} 
-                          className="flex items-center gap-3 bg-white p-2.5 rounded-lg border border-gray-200 hover:border-indigo-200 transition-all text-xs font-medium text-gray-700 shadow-sm"
-                        >
-                          <div className="text-gray-400 font-mono text-[10px] w-5 text-center">#{idx + 1}</div>
-                          <span>{col}</span>
-                          <span className="ml-auto bg-gray-50 text-gray-400 border border-gray-100 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase select-none">
-                            {locale === "pt" ? "Visível" : "Visible"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-4">
-                    <div className="bg-white p-3.5 rounded-lg border border-gray-200 flex flex-col gap-1.5 text-xs">
-                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider select-none">
-                        {locale === "pt" ? "TEMA DE CORES DO PIPELINE" : "PIPELINE COLOR THEME"}
-                      </span>
-                      <div className="font-bold text-gray-800 text-sm flex items-center justify-between">
-                        <span>{locale === "pt" ? "Arco-Íris (Clássico)" : "Rainbow (Classic)"}</span>
-                        <span className="text-xs text-indigo-600 font-semibold cursor-pointer hover:underline">{locale === "pt" ? "visualizar ▾" : "view ▾"}</span>
-                      </div>
-                      {/* Theme gradient preview bar */}
-                      <div className="h-2 w-full rounded flex mt-1 overflow-hidden">
-                        {stages.map(s => (
-                          <div key={s.key} style={{ backgroundColor: s.color }} className="flex-1 h-full" />
-                        ))}
-                      </div>
-                    </div>
-
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider select-none">
-                      {locale === "pt" ? "ESTÁGIOS DO PIPELINE" : "PIPELINE STAGES"}
-                    </span>
-
-                    <div className="flex flex-col gap-2">
-                      {stages.map((stage, idx) => (
-                        <div 
-                          key={stage.key} 
-                          className="flex items-center gap-3 bg-white p-3 rounded-lg border border-gray-200 hover:border-indigo-200 transition-all text-xs font-medium text-gray-800 shadow-sm"
-                        >
-                          <div 
-                            className="w-4 h-4 rounded flex items-center justify-center text-white shrink-0"
-                            style={{ backgroundColor: stage.color }}
-                          >
-                            <span className="text-[9px] font-bold">{idx + 1}</span>
-                          </div>
-                          <span className="font-bold text-gray-800">{stage.label}</span>
-                          <span className="ml-auto bg-gray-50 text-gray-400 border border-gray-100 text-[10px] px-1.5 py-0.5 rounded font-mono">
-                            {stage.count} {locale === "pt" ? "leads" : "leads"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <button 
-                      onClick={() => alert(locale === "pt" ? "A edição e adição de estágios personalizados são controladas automaticamente pelo cabeçalho da sua planilha do Google Sheets nas colunas estruturadas." : "Editing and adding custom stages are automatically controlled by the header of your Google Sheets spreadsheet in the structured columns.")}
-                      className="w-full py-3 border border-dashed border-gray-300 hover:border-indigo-300 text-gray-500 hover:text-indigo-600 rounded-lg text-xs font-bold transition-all bg-white flex items-center justify-center gap-1.5 cursor-pointer mt-2"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>{locale === "pt" ? "ADICIONAR ESTÁGIO" : "ADD STAGE"}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Drawer Footer */}
-              <div className="p-5 bg-gray-50 border-t border-gray-200 flex items-center justify-end">
-                <button
-                  onClick={() => setShowConfigDrawer(false)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-6 rounded-lg text-xs cursor-pointer shadow-sm transition-all"
-                >
-                  {locale === "pt" ? "Feito" : "Done"}
-                </button>
               </div>
             </motion.div>
           )}

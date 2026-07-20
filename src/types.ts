@@ -26,6 +26,7 @@ export interface BatchContact {
 
 export interface MeetingRow {
   rowIndex: number;
+  name?: string;
   email: string;
   suggestedTimes: string;
   bookedTime: string;

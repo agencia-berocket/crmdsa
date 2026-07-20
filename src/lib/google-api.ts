@@ -6,7 +6,7 @@ import {
   onAuthStateChanged,
   User,
 } from "firebase/auth";
-import { BatchContact, MeetingRow, GmailAlias } from "../types";
+import { BatchContact, GmailAlias } from "../types";
 
 // Initialize Firebase
 const firebaseConfig = {
@@ -150,16 +150,23 @@ export async function fetchBatches(spreadsheetId: string, sheetName = "batches")
       });
     })(),
     email: (() => {
-      // Prioritize finding a column containing "email", "e-mail" (excluding alerts)
+      // Prioritize an exact match on "#emails" — the actual email address column
+      // in this spreadsheet's real layout. This must win over "Email Sent" (which
+      // despite the name is a sent-status/date marker, not an address).
+      const hashEmailsIdx = headers.findIndex((h) => h.toLowerCase().trim() === "#emails");
+      if (hashEmailsIdx !== -1) return hashEmailsIdx;
+
+      // Next, a column literally named "email"/"e-mail" (excluding alerts and
+      // excluding "email sent"/"email sent alert", which are status markers, not addresses).
       const exactEmailIdx = headers.findIndex((h) => {
-        const norm = h.toLowerCase();
+        const norm = h.toLowerCase().trim();
         return (
-          norm.includes("email") || 
-          norm.includes("e-mail")
-        ) && !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific");
+          (norm === "email" || norm === "e-mail") &&
+          !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific")
+        );
       });
       if (exactEmailIdx !== -1) return exactEmailIdx;
-      
+
       // Try finding a column containing "contato" or "contact", but NEVER match Column A (index 0) to prevent email overwriting college
       const contactIdx = headers.findIndex((h, idx) => {
         const norm = h.toLowerCase();
@@ -170,15 +177,6 @@ export async function fetchBatches(spreadsheetId: string, sheetName = "batches")
         );
       });
       if (contactIdx !== -1) return contactIdx;
-
-      // Secondary Fallback: look for "sent" or "envio" columns (excluding alerts and "data"/"date")
-      const sentIdx = headers.findIndex((h) => {
-        const norm = h.toLowerCase();
-        return (norm.includes("sent") || norm.includes("envio")) && 
-               !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific") &&
-               !norm.includes("data") && !norm.includes("date");
-      });
-      if (sentIdx !== -1) return sentIdx;
 
       // Strict fallback to Column H (index 7) as specified by the user
       return 7;
@@ -316,119 +314,6 @@ export async function fetchBatches(spreadsheetId: string, sheetName = "batches")
 }
 
 // Fetch and parse the meetings tab
-export async function fetchMeetings(spreadsheetId: string, sheetName = "meetings"): Promise<MeetingRow[]> {
-  const data = await googleFetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z2000`
-  );
-
-  const values: string[][] = data.values || [];
-  if (values.length === 0) return [];
-
-  const headers = values[0].map(h => h.trim());
-
-  // Dynamic column detection
-  const colIndex = {
-    email: headers.findIndex((h) => h.toLowerCase().includes("email") || h.toLowerCase().includes("contato")),
-    suggestedTimes: headers.findIndex((h) => h.toLowerCase().includes("suggested") || h.toLowerCase().includes("sugerido")),
-    bookedTime: headers.findIndex((h) => h.toLowerCase().includes("booked") || h.toLowerCase().includes("marcado") || h.toLowerCase().includes("data")),
-    notes: headers.findIndex((h) => h.toLowerCase().includes("note") || h.toLowerCase().includes("anotação") || h.toLowerCase().includes("obs")),
-    status: headers.findIndex((h) => h.toLowerCase().includes("status")),
-    emailSentAlert: headers.findIndex(
-      (h) =>
-        h.toLowerCase().includes("alerta envio") ||
-        h.toLowerCase().includes("notificação envio") ||
-        h.toLowerCase().includes("sent alert") ||
-        h.toLowerCase().includes("email sent alert") ||
-        h.toLowerCase().includes("alerta_envio") ||
-        h.toLowerCase().includes("notificacao envio") ||
-        h.toLowerCase().includes("envio notificação") ||
-        h.toLowerCase().includes("envio notificacao") ||
-        h.toLowerCase().includes("notif. envio")
-    ),
-    emailReceivedAlert: headers.findIndex(
-      (h) =>
-        h.toLowerCase().includes("alerta retorno") ||
-        h.toLowerCase().includes("alerta recebido") ||
-        h.toLowerCase().includes("notificação retorno") ||
-        h.toLowerCase().includes("notificação recebido") ||
-        h.toLowerCase().includes("received alert") ||
-        h.toLowerCase().includes("email received alert") ||
-        h.toLowerCase().includes("alerta_retorno") ||
-        h.toLowerCase().includes("notificacao retorno") ||
-        h.toLowerCase().includes("notificacao recebido") ||
-        h.toLowerCase().includes("retorno notificação") ||
-        h.toLowerCase().includes("retorno notificacao") ||
-        h.toLowerCase().includes("notif. retorno")
-    ),
-    emailOpenedAlert: headers.findIndex(
-      (h) =>
-        h.toLowerCase().includes("alerta abertura") ||
-        h.toLowerCase().includes("notificação abertura") ||
-        h.toLowerCase().includes("opened alert") ||
-        h.toLowerCase().includes("email opened alert") ||
-        h.toLowerCase().includes("alerta_abertura") ||
-        h.toLowerCase().includes("notificacao abertura") ||
-        h.toLowerCase().includes("abertura notificação") ||
-        h.toLowerCase().includes("abertura notificacao") ||
-        h.toLowerCase().includes("abertura")
-    ),
-    dataEnvio: headers.findIndex((h) => {
-      const norm = h.toLowerCase().trim();
-      return (
-        (norm === "data de envio" || norm === "data do envio" || norm === "data envio" || norm === "enviado em" || norm === "date sent" || norm === "ultimo envio" || norm === "último envio") &&
-        !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific")
-      );
-    }),
-    dataAbertura: headers.findIndex((h) => {
-      const norm = h.toLowerCase().trim();
-      return (
-        (norm === "data de abertura" || norm === "abertura em" || norm === "aberto em" || norm === "data abertura" || norm === "opened at" || norm === "open date" || norm === "date opened") &&
-        !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific")
-      );
-    }),
-    dataRetorno: headers.findIndex((h) => {
-      const norm = h.toLowerCase().trim();
-      return (
-        (norm === "data de retorno" || norm === "data retorno" || norm === "resposta em" || norm === "retorno em" || norm === "replied at" || norm === "reply date" || norm === "date replied") &&
-        !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific")
-      );
-    }),
-    meetingConfirmationStatus: headers.findIndex((h) => {
-      const norm = h.toLowerCase().trim();
-      return norm.includes("confirmação reunião") || norm.includes("confirmacao reuniao") || norm.includes("meeting confirmation");
-    }),
-    meetingDateTime: headers.findIndex((h) => {
-      const norm = h.toLowerCase().trim();
-      return norm.includes("meeting date") || norm.includes("data da reunião") || norm.includes("data da reuniao");
-    }),
-  };
-
-  const meetings: MeetingRow[] = [];
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
-    const valAt = (idx: number) => (idx !== -1 && idx < row.length ? row[idx] || "" : "");
-
-    meetings.push({
-      rowIndex: i + 1,
-      email: valAt(colIndex.email),
-      suggestedTimes: valAt(colIndex.suggestedTimes),
-      bookedTime: valAt(colIndex.bookedTime),
-      notes: valAt(colIndex.notes),
-      status: valAt(colIndex.status),
-      emailSentAlert: valAt(colIndex.emailSentAlert),
-      emailReceivedAlert: valAt(colIndex.emailReceivedAlert),
-      emailOpenedAlert: valAt(colIndex.emailOpenedAlert),
-      dataEnvio: valAt(colIndex.dataEnvio),
-      dataAbertura: valAt(colIndex.dataAbertura),
-      dataRetorno: valAt(colIndex.dataRetorno),
-      meetingConfirmationStatus: valAt(colIndex.meetingConfirmationStatus),
-      meetingDateTime: valAt(colIndex.meetingDateTime),
-    });
-  }
-
-  return meetings;
-}
-
 // Update a single cell in Google Sheets (e.g., Status or Notes)
 export async function updateSheetCell(
   spreadsheetId: string,
@@ -539,7 +424,7 @@ export async function updateSheetRow(
     "name": ["name", "nome", "estudante", "aluno"],
     "status": ["status pipeline", "status"],
     "notes": ["note", "anotação", "obs", "observações", "comentário"],
-    "email": ["email", "e-mail"],
+    "email": ["#emails", "email", "e-mail"],
     "data do envio": ["data do envio", "data de envio", "date sent", "data envio"],
     "notif. envio": ["notif. envio", "notificação envio", "alerta envio", "email sent alert"],
     "abertura": ["abertura"],
@@ -578,7 +463,12 @@ export async function updateSheetRow(
     }
   }
 
-  if (dataToUpdate.length === 0) return;
+  if (dataToUpdate.length === 0) {
+    console.warn("[updateSheetRow] No columns matched for updates:", Object.keys(updates), "headers:", headers);
+    return;
+  }
+
+  console.info("[updateSheetRow] Writing:", dataToUpdate);
 
   // Execute batchUpdate
   return googleFetch(
@@ -639,9 +529,15 @@ export async function addBatchLead(
   });
 
   const emailIdx = (() => {
+    // Prioritize an exact match on "#emails" — the actual email address column
+    // in this spreadsheet's real layout, which must win over "Email Sent" (a
+    // sent-status/date marker, not an address).
+    const hashEmailsIdx = headers.findIndex((h) => h.toLowerCase().trim() === "#emails");
+    if (hashEmailsIdx !== -1) return hashEmailsIdx;
+
     const exactEmailIdx = headers.findIndex((h) => {
       const norm = h.toLowerCase().trim();
-      return (norm.includes("email") || norm.includes("e-mail")) && 
+      return (norm === "email" || norm === "e-mail") &&
              !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific");
     });
     if (exactEmailIdx !== -1) return exactEmailIdx;
@@ -649,7 +545,7 @@ export async function addBatchLead(
     // Search for contato or contact but strictly prevent matching Column A (index 0)
     const contactIdx = headers.findIndex((h, idx) => {
       const norm = h.toLowerCase().trim();
-      return (norm.includes("contato") || norm.includes("contact")) && 
+      return (norm.includes("contato") || norm.includes("contact")) &&
              idx !== 0 &&
              !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific");
     });
@@ -703,74 +599,6 @@ export async function addBatchLead(
   );
 }
 
-// Dynamically maps meeting lead keys to actual headers in the sheet and appends a new row
-export async function addMeetingLead(
-  spreadsheetId: string,
-  sheetName: string,
-  leadData: {
-    email: string;
-    suggestedTimes: string;
-    bookedTime: string;
-    status: string;
-    notes: string;
-  }
-) {
-  // Fetch headers first to do fuzzy mapping and locate column indices
-  const headersData = await googleFetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z1`
-  );
-  
-  const headers: string[] = headersData.values?.[0] || [];
-
-  const findHeaderIndex = (patterns: string[]): number => {
-    return headers.findIndex(h => 
-      patterns.some(p => h.toLowerCase().trim().includes(p.toLowerCase()))
-    );
-  };
-
-  const emailIdx = findHeaderIndex(["email", "contato"]);
-  const sugIdx = findHeaderIndex(["suggested", "sugerido"]);
-  const bookIdx = findHeaderIndex(["booked", "marcado", "data"]);
-  const statusIdx = findHeaderIndex(["status"]);
-  const notesIdx = findHeaderIndex(["note", "anotação", "obs", "observações", "comentário"]);
-
-  // Build the row array matching the sheet's structure
-  let rowValues: string[] = [];
-  if (headers.length > 0) {
-    const maxIdx = Math.max(emailIdx, sugIdx, bookIdx, statusIdx, notesIdx, headers.length - 1);
-    rowValues = Array(maxIdx + 1).fill("");
-    
-    if (emailIdx !== -1) rowValues[emailIdx] = leadData.email;
-    if (sugIdx !== -1) rowValues[sugIdx] = leadData.suggestedTimes;
-    if (bookIdx !== -1) rowValues[bookIdx] = leadData.bookedTime;
-    if (statusIdx !== -1) rowValues[statusIdx] = leadData.status;
-    if (notesIdx !== -1) rowValues[notesIdx] = leadData.notes;
-  } else {
-    // Fallback if sheet is completely empty without headers
-    rowValues = [
-      leadData.email,
-      leadData.suggestedTimes,
-      leadData.bookedTime,
-      leadData.notes,
-      leadData.status
-    ];
-  }
-
-  // Append values dynamically, which automatically expands the spreadsheet grid bounds if needed
-  return googleFetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:append?valueInputOption=USER_ENTERED`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        range: `${sheetName}!A1`,
-        majorDimension: "ROWS",
-        values: [rowValues],
-      }),
-    }
-  );
-}
-
-
 /**
  * GMAIL FUNCTIONS
  */
@@ -815,18 +643,23 @@ export async function sendGmailMessage(
       : `From: ${fromEmail}`
     : "";
 
-  const parts = [
+  const headers = [
     `To: ${to}`,
     fromHeader,
     `Subject: ${utf8Subject}`,
     "MIME-Version: 1.0",
     "Content-Type: text/html; charset=utf-8",
     "Content-Transfer-Encoding: base64",
-    "",
-    bodyHtml,
   ].filter(line => line !== "");
 
-  const message = parts.join("\r\n");
+  // Encode the body itself as base64 (UTF-8 safe) and wrap at 76 chars per
+  // RFC 2045, since we declare Content-Transfer-Encoding: base64 above.
+  // Without this, accented characters (á, ã, ç, é, etc.) get corrupted by
+  // clients that trust the header instead of sniffing the actual content.
+  const bodyBase64 = btoa(unescape(encodeURIComponent(bodyHtml)))
+    .replace(/(.{76})/g, "$1\r\n");
+
+  const message = `${headers.join("\r\n")}\r\n\r\n${bodyBase64}`;
   
   // Base64URL encode standard RFC 2822 format
   const base64SafeMessage = btoa(unescape(encodeURIComponent(message)))

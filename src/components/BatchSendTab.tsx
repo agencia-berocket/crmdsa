@@ -716,29 +716,29 @@ export default function BatchSendTab({
         ) : (
           <div className="flex-1 flex flex-col gap-4 bg-white border border-gray-200 rounded-xl p-5 text-xs shadow-sm">
             {/* Meta headers */}
-            <div className="flex flex-col gap-2.5 border-b border-gray-100 pb-3 text-gray-600">
-              <div className="flex items-center">
-                <span className="font-bold text-gray-400 w-12 block shrink-0 text-[10px] uppercase">
+            <div className="flex flex-col gap-2 border-b border-gray-100 pb-3 text-gray-600">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-gray-400 w-14 shrink-0 text-[10px] uppercase tracking-wide">
                   De:
                 </span>
-                <span className="font-mono text-xs bg-gray-50 text-gray-700 px-2.5 py-1 rounded border border-gray-200 truncate max-w-[190px]">
+                <span className="font-mono text-[11px] bg-gray-50 text-gray-700 px-2 py-1 rounded border border-gray-200 truncate min-w-0 flex-1">
                   {selectedAlias || "suaconta@gmail.com"}
                 </span>
               </div>
-              <div className="flex items-center">
-                <span className="font-bold text-gray-400 w-12 block shrink-0 text-[10px] uppercase">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-gray-400 w-14 shrink-0 text-[10px] uppercase tracking-wide">
                   Para:
                 </span>
-                <span className="font-semibold text-indigo-600 font-mono text-xs truncate max-w-[190px]">
+                <span className="font-medium text-indigo-600 font-mono text-[11px] truncate min-w-0 flex-1">
                   {extractEmailAddress(currentPreviewContact) ||
                     `[E-mail na linha #${currentPreviewContact.rowIndex}]`}
                 </span>
               </div>
-              <div className="flex items-start mt-1">
-                <span className="font-bold text-gray-400 w-12 block shrink-0 text-[10px] uppercase mt-0.5">
+              <div className="flex items-start gap-2 pt-1 mt-0.5 border-t border-gray-100">
+                <span className="font-bold text-gray-400 w-14 shrink-0 text-[10px] uppercase tracking-wide mt-0.5">
                   Assunto:
                 </span>
-                <span className="font-bold text-gray-800 text-sm leading-tight">
+                <span className="font-semibold text-gray-800 text-xs leading-snug flex-1 min-w-0 break-words">
                   {previewSubject || "(Sem Assunto)"}
                 </span>
               </div>

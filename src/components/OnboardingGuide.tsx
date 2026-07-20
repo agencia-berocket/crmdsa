@@ -61,7 +61,7 @@ export default function OnboardingGuide({ isOpen, onClose, onNavigateToTab }: On
       steps: [
         {
           title: "👋 Bem-vindo ao DW CRM Acadêmico!",
-          description: "Esta ferramenta foi criada para centralizar e automatizar todo o funil de prospecção estudantil da sua equipe. Ele se integra nativamente ao Google Planilhas, Gmail, Calendar, Tasks e Google Contacts para que você trabalhe de forma fluida sem sair de uma única interface.",
+          description: "Esta ferramenta foi criada para centralizar e automatizar todo o funil de prospecção estudantil da sua equipe. Ele se integra nativamente ao Google Planilhas, Gmail e Google Calendar para que você trabalhe de forma fluida sem sair de uma única interface. As gavetas de Tarefas e Contatos no menu superior são áreas de apoio locais, úteis para organização pessoal do dia a dia.",
           icon: <Layout className="w-8 h-8 text-indigo-600" />,
           tip: "Clique nos ícones laterais e superiores para descobrir as conexões.",
           targetTab: "home" as const
@@ -565,7 +565,7 @@ export default function OnboardingGuide({ isOpen, onClose, onNavigateToTab }: On
                 {/* batches sheet */}
                 <div className="bg-white p-5 rounded-2xl border border-gray-150 shadow-xs flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-indigo-950 font-mono">1. batches</span>
+                    <span className="font-bold text-xs text-indigo-950 font-mono">batches</span>
                     <span className="text-[9px] bg-indigo-50 text-indigo-700 font-bold px-1.5 py-0.5 rounded select-none">
                       {locale === "pt" ? "Aba Contatos" : "Contacts Sheet"}
                     </span>
@@ -599,35 +599,31 @@ export default function OnboardingGuide({ isOpen, onClose, onNavigateToTab }: On
                   </div>
                 </div>
 
-                {/* meetings sheet */}
+                {/* meeting columns, now tracked inside the same batches row */}
                 <div className="bg-white p-5 rounded-2xl border border-gray-150 shadow-xs flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-indigo-950 font-mono">2. meetings</span>
+                    <span className="font-bold text-xs text-indigo-950 font-mono">batches</span>
                     <span className="text-[9px] bg-emerald-50 text-emerald-700 font-bold px-1.5 py-0.5 rounded select-none">
-                      {locale === "pt" ? "Aba Reuniões" : "Meetings Sheet"}
+                      {locale === "pt" ? "Colunas de Reunião" : "Meeting Columns"}
                     </span>
                   </div>
 
                   <div className="flex flex-col gap-1.5 text-[11px] font-medium text-gray-500 font-mono">
                     <div className="p-2 bg-gray-50 rounded border border-gray-100 flex justify-between">
-                      <strong className="text-indigo-950">email</strong>
-                      <span>(ex: joao@usp.br)</span>
-                    </div>
-                    <div className="p-2 bg-gray-50 rounded border border-gray-100 flex justify-between">
-                      <strong className="text-indigo-950">suggested times</strong>
+                      <strong className="text-indigo-950">Suggested Times</strong>
                       <span>(ex: Quinta 15h)</span>
                     </div>
                     <div className="p-2 bg-gray-50 rounded border border-gray-100 flex justify-between">
-                      <strong className="text-indigo-950">booked time</strong>
+                      <strong className="text-indigo-950">Booked Time</strong>
                       <span>(ex: 18/07/2026 15:00)</span>
                     </div>
                     <div className="p-2 bg-gray-50 rounded border border-gray-100 flex justify-between">
-                      <strong className="text-indigo-950">Notes</strong>
-                      <span>(Notas de agendamento)</span>
+                      <strong className="text-indigo-950">Status Meetings</strong>
+                      <span>(waiting on them, Scheduled...)</span>
                     </div>
                     <div className="p-2 bg-gray-50 rounded border border-gray-100 flex justify-between">
-                      <strong className="text-indigo-950">Status</strong>
-                      <span>(Booked, Proposed)</span>
+                      <strong className="text-indigo-950">Notes Meetings</strong>
+                      <span>(Notas de agendamento)</span>
                     </div>
                   </div>
                 </div>
@@ -636,10 +632,10 @@ export default function OnboardingGuide({ isOpen, onClose, onNavigateToTab }: On
               <div className="bg-blue-50/50 border border-blue-150 p-4 rounded-2xl flex gap-2.5 items-start mt-2">
                 <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5 pointer-events-none" />
                 <div className="text-xs text-blue-900 leading-relaxed font-medium">
-                  <strong className="block font-bold">{locale === "pt" ? "Importante: Sensibilidade a Maiúsculas/Minúsculas" : "Important: Case-Sensitivity"}</strong>
-                  {locale === "pt" 
-                    ? "Os nomes das abas (batches, meetings) e os nomes de suas respectivas colunas devem ser escritos exatamente como mostrado acima, respeitando letras maiúsculas e minúsculas."
-                    : "The tab names (batches, meetings) and their respective column names must be written exactly as shown above, respecting capitalization (case-sensitivity)."}
+                  <strong className="block font-bold">{locale === "pt" ? "Importante: Fonte Única de Dados" : "Important: Single Source of Data"}</strong>
+                  {locale === "pt"
+                    ? "Todo o CRM (Home, Reuniões, Automação) lê exclusivamente a aba 'batches'. Não é preciso manter uma aba 'meetings' separada — as informações de reunião vivem em colunas na própria linha do lead. Os nomes da aba e das colunas devem ser escritos exatamente como mostrado acima, respeitando letras maiúsculas e minúsculas."
+                    : "The entire CRM (Home, Meetings, Automation) reads exclusively from the 'batches' tab. You don't need a separate 'meetings' tab — meeting information lives in columns on the lead's own row. The tab name and column names must be written exactly as shown above, respecting capitalization (case-sensitivity)."}
                 </div>
               </div>
             </div>

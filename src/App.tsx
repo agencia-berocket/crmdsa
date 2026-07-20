@@ -42,14 +42,13 @@ import {
   googleSignIn,
   logout,
   fetchBatches,
-  fetchMeetings,
   fetchCalendarMeetings,
   mapConfirmationStatusLabel,
   updateSheetRow,
   addBatchLead,
   searchReplies,
 } from "./lib/google-api";
-import { BatchContact, MeetingRow } from "./types";
+import { BatchContact } from "./types";
 import AuthButton from "./components/AuthButton";
 import CRMTable from "./components/CRMTable";
 import BatchSendTab from "./components/BatchSendTab";
@@ -95,7 +94,6 @@ export default function App() {
 
   // Active loaded data
   const [batchesData, setBatchesData] = useState<BatchContact[]>([]);
-  const [meetingsData, setMeetingsData] = useState<MeetingRow[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   // Active CRM table selections
@@ -171,6 +169,9 @@ export default function App() {
   // Pipelines Accordion open state in sidebar
   const [pipelinesOpen, setPipelinesOpen] = useState(true);
 
+  // Left navigation sidebar visibility (toggled by hamburger menu)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
   // Search input state in Gmail top search bar
   const [globalSearch, setGlobalSearch] = useState("");
 
@@ -212,19 +213,12 @@ export default function App() {
     if (!silent) setIsLoadingData(true);
 
     try {
-      const [batches, meetings] = await Promise.all([
-        fetchBatches(spreadsheetId).catch((err) => {
-          console.warn("Could not load batches tab, returning empty:", err);
-          return [];
-        }),
-        fetchMeetings(spreadsheetId).catch((err) => {
-          console.warn("Could not load meetings tab, returning empty:", err);
-          return [];
-        }),
-      ]);
+      const batches = await fetchBatches(spreadsheetId).catch((err) => {
+        console.warn("Could not load batches tab, returning empty:", err);
+        return [];
+      });
 
       setBatchesData(batches);
-      setMeetingsData(meetings);
       setIsSheetConnected(true);
       try {
         localStorage.setItem("dw_crm_spreadsheet_id", spreadsheetId);
@@ -234,7 +228,7 @@ export default function App() {
 
       // Trigger background sync silently to update tracking (opens and replies) automatically!
       setTimeout(() => {
-        runAutomaticSync(batches, meetings);
+        runAutomaticSync(batches);
       }, 300);
     } catch (err) {
       console.error("Erro ao sincronizar dados da planilha:", err);
@@ -242,8 +236,8 @@ export default function App() {
         showAlert(
           locale === "pt" ? "Erro ao carregar" : "Loading Error",
           locale === "pt"
-            ? "Não foi possível carregar as abas 'batches' e/ou 'meetings'. Verifique se a planilha possui as abas com os nomes corretos e se sua conta possui permissão de leitura."
-            : "Could not load 'batches' and/or 'meetings' sheets. Please verify your spreadsheet has sheets named 'batches' and 'meetings', and that your account has read permissions.",
+            ? "Não foi possível carregar a aba 'batches'. Verifique se a planilha possui a aba com o nome correto e se sua conta possui permissão de leitura."
+            : "Could not load the 'batches' sheet. Please verify your spreadsheet has a sheet named 'batches', and that your account has read permissions.",
         );
       }
       setIsSheetConnected(false);
@@ -255,7 +249,6 @@ export default function App() {
   // Background Automatic Sync for email opens and email replies (automatic tracking)
   const runAutomaticSync = async (
     currentBatches: BatchContact[],
-    currentMeetings: MeetingRow[],
   ) => {
     if (!spreadsheetId) return;
     try {
@@ -272,12 +265,9 @@ export default function App() {
           for (const open of opens) {
             const rowIndex = parseInt(open.row, 10);
             const contact = currentBatches.find((c) => c.rowIndex === rowIndex);
-            // Only update if current status is not already Opened or Replied
-            if (
-              contact &&
-              contact.status !== "Opened" &&
-              contact.status !== "Replied - waiting"
-            ) {
+            // Autocorrect legacy rows too: reprocess whenever the actual
+            // "Abertura" column is still empty, regardless of Status.
+            if (contact && !contact.emailOpenedAlert) {
               const todayStr = new Date().toLocaleDateString("en-US", {
                 month: "short",
                 day: "numeric",
@@ -289,12 +279,8 @@ export default function App() {
               const updateData: any = {
                 Status: "Opened",
                 Notes: notesWithOpen,
+                "abertura": locale === "pt" ? "Aberto" : "Opened",
               };
-              updateData["Alerta Abertura"] =
-                locale === "pt" ? "Aberto" : "Opened";
-              updateData["Email Opened Alert"] = "Opened";
-              updateData["Abertura"] = locale === "pt" ? "Aberto" : "Opened";
-              updateData["Date Opened"] = todayStr;
 
               await updateSheetRow(
                 spreadsheetId,
@@ -325,8 +311,7 @@ export default function App() {
         })
         .filter(Boolean);
 
-      const meetingEmails = currentMeetings.map((m) => m.email).filter(Boolean);
-      const allEmails = Array.from(new Set([...batchEmails, ...meetingEmails]));
+      const allEmails = Array.from(new Set(batchEmails));
 
       if (allEmails.length > 0) {
         const replies = await searchReplies(allEmails);
@@ -350,7 +335,9 @@ export default function App() {
               });
             }
 
-            if (batchContact && batchContact.status !== "Replied - waiting") {
+            // Autocorrect legacy rows too: reprocess whenever the actual
+            // "Notif. Retorno" column is still empty, regardless of Status.
+            if (batchContact && !batchContact.emailReceivedAlert) {
               const todayStr = new Date().toLocaleDateString("en-US", {
                 month: "short",
                 day: "numeric",
@@ -362,55 +349,13 @@ export default function App() {
               const updateData: any = {
                 Status: "Replied - waiting",
                 Notes: notesWithReply,
+                "notif. retorno": locale === "pt" ? "Novo Retorno!" : "New Reply!",
               };
-              updateData["Alerta Retorno"] =
-                locale === "pt" ? "Novo Retorno!" : "New Reply!";
-              updateData["Email Received Alert"] = "New Reply!";
-              updateData["Alerta Recebido"] =
-                locale === "pt" ? "Novo Retorno!" : "New Reply!";
-              updateData["Retorno Notificação"] =
-                locale === "pt" ? "Novo Retorno!" : "New Reply!";
-              updateData["Date Replied"] = todayStr;
 
               await updateSheetRow(
                 spreadsheetId,
                 "batches",
                 batchContact.rowIndex,
-                updateData,
-              );
-              hasUpdates = true;
-            }
-
-            // Also match meeting row
-            const meetingRow = currentMeetings.find(
-              (m) => (m.email || "").toLowerCase() === email,
-            );
-            if (meetingRow && meetingRow.status !== "Replied - waiting") {
-              const todayStr = new Date().toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              });
-              const notesWithReply = meetingRow.notes
-                ? `${meetingRow.notes}\n[${locale === "pt" ? "Automação: Resposta recebida detectada em" : "Automation: Reply received detected on"} ${todayStr}]`
-                : `[${locale === "pt" ? "Automação: Resposta recebida detectada em" : "Automation: Reply received detected on"} ${todayStr}]`;
-
-              const updateData: any = {
-                status: "Replied - waiting",
-                Notes: notesWithReply,
-              };
-              updateData["Alerta Retorno"] =
-                locale === "pt" ? "Novo Retorno!" : "New Reply!";
-              updateData["Email Received Alert"] = "New Reply!";
-              updateData["Alerta Recebido"] =
-                locale === "pt" ? "Novo Retorno!" : "New Reply!";
-              updateData["Retorno Notificação"] =
-                locale === "pt" ? "Novo Retorno!" : "New Reply!";
-              updateData["Date Replied"] = todayStr;
-
-              await updateSheetRow(
-                spreadsheetId,
-                "meetings",
-                meetingRow.rowIndex,
                 updateData,
               );
               hasUpdates = true;
@@ -422,12 +367,8 @@ export default function App() {
       // If updates were written to the sheet in the background, reload the clean data silently
       if (hasUpdates) {
         console.log("[AutoSync] Background changes saved. Reloading data...");
-        const [batches, meetings] = await Promise.all([
-          fetchBatches(spreadsheetId).catch(() => []),
-          fetchMeetings(spreadsheetId).catch(() => []),
-        ]);
+        const batches = await fetchBatches(spreadsheetId).catch(() => []);
         setBatchesData(batches);
-        setMeetingsData(meetings);
       }
     } catch (err) {
       console.warn(
@@ -445,11 +386,11 @@ export default function App() {
       console.log(
         "[AutoSync] Running periodic background tracker synchronization...",
       );
-      runAutomaticSync(batchesData, meetingsData);
+      runAutomaticSync(batchesData);
     }, 60000);
 
     return () => clearInterval(intervalId);
-  }, [spreadsheetId, isSheetConnected, batchesData, meetingsData]);
+  }, [spreadsheetId, isSheetConnected, batchesData]);
 
   // Trigger Sheet Connection
   const handleConnectSheet = async (e: React.FormEvent) => {
@@ -467,13 +408,9 @@ export default function App() {
     setSpreadsheetId(cleanedId);
     setIsConnectingSheet(true);
     try {
-      const [batches, meetings] = await Promise.all([
-        fetchBatches(cleanedId),
-        fetchMeetings(cleanedId),
-      ]);
+      const batches = await fetchBatches(cleanedId);
 
       setBatchesData(batches);
-      setMeetingsData(meetings);
       setIsSheetConnected(true);
       try {
         localStorage.setItem("dw_crm_spreadsheet_id", cleanedId);
@@ -562,7 +499,6 @@ export default function App() {
         setNeedsAuth(true);
         setIsSheetConnected(false);
         setBatchesData([]);
-        setMeetingsData([]);
       },
     );
   };
@@ -705,8 +641,8 @@ export default function App() {
     const interested = batchesData.filter(
       (b) => b.status === "Replied - waiting" || b.status === "respondeu",
     ).length;
-    const scheduled = meetingsData.filter(
-      (m) => m.status === "Scheduled" || m.status === "booked" || m.bookedTime,
+    const scheduled = batchesData.filter(
+      (b) => b.statusMeetings === "Scheduled" || b.statusMeetings === "booked" || b.bookedTime,
     ).length;
 
     // Percentage calculated
@@ -725,7 +661,7 @@ export default function App() {
       conversionRate,
       responseRate,
     };
-  }, [batchesData, meetingsData]);
+  }, [batchesData]);
 
   return (
     <div
@@ -736,7 +672,10 @@ export default function App() {
       <header className="bg-white border-b border-gray-200 py-3 px-4 flex items-center justify-between sticky top-0 z-30 shadow-sm h-16">
         {/* Left branding area */}
         <div className="flex items-center gap-3">
-          <button className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors hidden md:block">
+          <button
+            onClick={() => setIsSidebarOpen((prev) => !prev)}
+            className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors hidden md:block"
+          >
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2 select-none">
@@ -998,12 +937,6 @@ export default function App() {
                   </span>
                   <p className="text-gray-400 mt-1">{t("batchesSheetInfo")}</p>
                 </div>
-                <div className="bg-white p-2.5 rounded-lg border border-gray-100 shadow-sm">
-                  <span className="font-bold text-indigo-600">
-                    meetings ({locale === "pt" ? "Reuniões" : "Meetings"})
-                  </span>
-                  <p className="text-gray-400 mt-1">{t("meetingsSheetInfo")}</p>
-                </div>
               </div>
             </div>
           </motion.div>
@@ -1110,7 +1043,16 @@ export default function App() {
           </aside>
 
           {/* B. Gmail Sidebar 2: Navigation Drawer (w-64, light `#f6f8fc` or white) */}
-          <aside className="w-64 bg-[#f6f8fc] border-r border-gray-200 p-4 flex flex-col gap-4 shrink-0 overflow-y-auto hidden lg:flex">
+          <AnimatePresence initial={false}>
+          {isSidebarOpen && (
+          <motion.aside
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 256, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ type: "spring", damping: 30, stiffness: 220 }}
+            className="bg-[#f6f8fc] border-r border-gray-200 shrink-0 overflow-y-auto overflow-x-hidden"
+          >
+            <div className="w-64 p-4 flex flex-col gap-4">
             {/* Material You '+ Novo pipeline' Button (Screen 9 highlight!) */}
             <button
               onClick={handleOpenNewLeadModal}
@@ -1212,7 +1154,7 @@ export default function App() {
                         <span className="truncate">{t("meetings")}</span>
                       </span>
                       <span className="text-[10px] bg-gray-200/60 font-bold px-1.5 py-0.5 rounded text-gray-500 font-mono">
-                        {meetingsData.length}
+                        {globalMetrics.scheduled}
                       </span>
                     </button>
                   </div>
@@ -1341,7 +1283,10 @@ export default function App() {
                 {t("changeSpreadsheet")} ▾
               </button>
             </div>
-          </aside>
+            </div>
+          </motion.aside>
+          )}
+          </AnimatePresence>
 
           {/* C. GMAIL CENTRAL FLOATING PANEL (rounded-[24px], contains active view) */}
           <section className="flex-1 overflow-hidden p-4 md:p-5 flex flex-col gap-4 bg-[#f6f8fc]">
@@ -1355,8 +1300,8 @@ export default function App() {
                 </p>
                 <p className="text-[10px] text-gray-400 mt-1">
                   {locale === "pt"
-                    ? "Lendo abas batches e meetings simultaneamente."
-                    : "Reading batches and meetings tabs simultaneously."}
+                    ? "Lendo a aba batches."
+                    : "Reading the batches tab."}
                 </p>
               </div>
             ) : (
@@ -1544,7 +1489,6 @@ export default function App() {
                       type="batches"
                       spreadsheetId={spreadsheetId}
                       batchesData={batchesData}
-                      meetingsData={meetingsData}
                       selectedRowIndexes={selectedRowIndexes}
                       onSelectRowChange={setSelectedRowIndexes}
                       onRefresh={handleRefreshAllData}
@@ -1562,7 +1506,6 @@ export default function App() {
                       type="meetings"
                       spreadsheetId={spreadsheetId}
                       batchesData={batchesData}
-                      meetingsData={meetingsData}
                       selectedRowIndexes={selectedRowIndexes}
                       onSelectRowChange={setSelectedRowIndexes}
                       onRefresh={handleRefreshAllData}
@@ -1589,7 +1532,6 @@ export default function App() {
                     <AutomationTab
                       spreadsheetId={spreadsheetId}
                       batchesData={batchesData}
-                      meetingsData={meetingsData}
                       onRefresh={handleRefreshAllData}
                     />
                   )}

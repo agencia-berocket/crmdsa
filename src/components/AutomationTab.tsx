@@ -12,7 +12,7 @@ import {
   ArrowRight,
   Info,
 } from "lucide-react";
-import { BatchContact, MeetingRow } from "../types";
+import { BatchContact } from "../types";
 import {
   searchReplies,
   searchBounces,
@@ -25,14 +25,12 @@ import { useI18n } from "../lib/i18n";
 interface AutomationTabProps {
   spreadsheetId: string;
   batchesData: BatchContact[];
-  meetingsData: MeetingRow[];
   onRefresh: () => void;
 }
 
 export default function AutomationTab({
   spreadsheetId,
   batchesData,
-  meetingsData,
   onRefresh,
 }: AutomationTabProps) {
   const { t, locale } = useI18n();
@@ -203,8 +201,7 @@ export default function AutomationTab({
       const batchEmails = batchesData
         .map((c) => extractEmail(c))
         .filter(Boolean);
-      const meetingEmails = meetingsData.map((m) => m.email).filter(Boolean);
-      const allEmails = Array.from(new Set([...batchEmails, ...meetingEmails]));
+      const allEmails = Array.from(new Set(batchEmails));
 
       if (allEmails.length === 0) {
         alert(
@@ -238,7 +235,7 @@ export default function AutomationTab({
           );
         }
 
-        if (batchContact && batchContact.status !== "Replied - waiting") {
+        if (batchContact && !batchContact.emailReceivedAlert) {
           const notesWithReply = batchContact.notes
             ? `${batchContact.notes}\n[${locale === "pt" ? "Automação: Resposta recebida detectada em" : "Automation: Reply received detected on"} ${todayStr}]`
             : `[${locale === "pt" ? "Automação: Resposta recebida detectada em" : "Automation: Reply received detected on"} ${todayStr}]`;
@@ -258,28 +255,6 @@ export default function AutomationTab({
           sheetsUpdated++;
         }
 
-        const meetingRow = meetingsData.find(
-          (m) => m.email.toLowerCase() === email.toLowerCase(),
-        );
-        if (meetingRow && meetingRow.status !== "Replied - waiting") {
-          const notesWithReply = meetingRow.notes
-            ? `${meetingRow.notes}\n[${locale === "pt" ? "Automação: Resposta recebida detectada em" : "Automation: Reply received detected on"} ${todayStr}]`
-            : `[${locale === "pt" ? "Automação: Resposta recebida detectada em" : "Automation: Reply received detected on"} ${todayStr}]`;
-
-          const updateData: any = {
-            Status: "Replied - waiting",
-            Notes: notesWithReply,
-            "notif. retorno": locale === "pt" ? "Novo Retorno!" : "New Reply!",
-          };
-
-          await updateSheetRow(
-            spreadsheetId,
-            "meetings",
-            meetingRow.rowIndex,
-            updateData,
-          );
-          sheetsUpdated++;
-        }
       }
 
       setRepliesResult(repliedDetections.map((r) => r.email));
