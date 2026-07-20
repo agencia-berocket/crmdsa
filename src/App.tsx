@@ -662,10 +662,6 @@ export default function App() {
     setIsNewLeadModalOpen(false);
 
     try {
-      const todayStr = new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
       await addBatchLead(spreadsheetId, "batches", batchesData.length + 2, {
         university: newLeadUniversity.trim(),
         studentOrganization: newLeadStudentOrg.trim(),
@@ -673,7 +669,6 @@ export default function App() {
         status: newLeadStatus || "Lead",
         notes: newLeadNotes.trim(),
         email: newLeadEmail.trim(),
-        emailSent: todayStr,
       });
 
       await handleRefreshAllData(true);

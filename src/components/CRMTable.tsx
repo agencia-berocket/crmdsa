@@ -21,7 +21,6 @@ import {
   Settings,
   X,
   AlertTriangle,
-  Sparkles,
   MailCheck,
   MessageSquareReply,
   CalendarPlus,
@@ -130,10 +129,6 @@ export default function CRMTable({
       }
     }
   }, [autoOpenRowIndex, batchesData, meetingsFromLeads, type]);
-
-  // States for AI Autofill
-  const [isAutofilling, setIsAutofilling] = useState(false);
-  const [aiResult, setAiResult] = useState<any>(null);
 
   // State for Copied Link feedback
 
@@ -545,7 +540,6 @@ export default function CRMTable({
     setEditedStatus(clonedItem.status || "");
     setEditedNotes(clonedItem.notes || "");
     setSaveSuccess(false);
-    setAiResult(null); // clear old AI result on open
 
     if (type === "batches") {
       const b = clonedItem as BatchContact;
@@ -678,58 +672,6 @@ export default function CRMTable({
       );
     } finally {
       setIsCreatingMeeting(false);
-    }
-  };
-
-  // Execute AI Autofill analysis on lead notes
-  const handleAIAutofill = async () => {
-    if (!selectedRow) return;
-    setIsAutofilling(true);
-    setAiResult(null);
-
-    const name = type === "batches" ? (selectedRow as BatchContact).name : "";
-    const organization = type === "batches" ? (selectedRow as BatchContact).studentOrganization : "";
-
-    try {
-      const response = await fetch("/api/ai/autofill", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          notes: editedNotes,
-          name,
-          organization,
-          contextType: type
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error("Erro na requisição ao Gemini autofill");
-      }
-
-      const data = await response.json();
-      setAiResult(data);
-      
-      // Auto-apply suggested parameters to local inputs
-      if (data.status) {
-        setEditedStatus(data.status);
-      }
-      if (type === "meetings") {
-        if (data.suggestedTimes) {
-          setEditedTimes(data.suggestedTimes);
-        }
-        if (data.bookedTime) {
-          setEditedBooked(data.bookedTime);
-        }
-      }
-    } catch (err) {
-      console.error(err);
-      alert(
-        locale === "pt"
-          ? "Houve um erro ao processar o Autofill por IA. Verifique se suas notas contêm informações úteis."
-          : "There was an error processing AI Autofill. Please verify that your notes contain useful information."
-      );
-    } finally {
-      setIsAutofilling(false);
     }
   };
 
@@ -1531,70 +1473,6 @@ export default function CRMTable({
                   )}
                 </div>
 
-                {/* AI Autofill Powered by Gemini */}
-                <div className="bg-indigo-50/40 border border-indigo-150 rounded-2xl p-4 flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4 text-indigo-600 animate-pulse" />
-                      <span className="text-xs font-bold text-gray-800">{locale === "pt" ? "Autofill por IA (Gemini)" : "AI Autofill (Gemini)"}</span>
-                    </div>
-                    <button
-                      onClick={handleAIAutofill}
-                      disabled={isAutofilling || !editedNotes}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] px-2.5 py-1.5 rounded-lg disabled:opacity-40 flex items-center gap-1 transition-all cursor-pointer select-none"
-                    >
-                      {isAutofilling ? (
-                        <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
-                      ) : (
-                        <Sparkles className="w-3 h-3" />
-                      )}
-                      <span>{locale === "pt" ? "Preencher" : "Autofill"}</span>
-                    </button>
-                  </div>
-
-                  {!editedNotes && (
-                    <p className="text-[10px] text-gray-400 italic">
-                      {locale === "pt" ? "Adicione algumas notas de prospecção acima para o Gemini analisar e preencher o pipeline." : "Add some prospecting notes above for Gemini to analyze and autofill."}
-                    </p>
-                  )}
-
-                  {aiResult && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex flex-col gap-2 bg-white border border-indigo-100 rounded-xl p-3 text-[11px]"
-                    >
-                      {aiResult.sentiment && (
-                        <div className="flex items-center gap-1.5 border-b border-gray-100 pb-1.5">
-                          <span className="font-bold text-gray-500">{locale === "pt" ? "Sentimento:" : "Sentiment:"}</span>
-                          <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] uppercase ${
-                            aiResult.sentiment.toLowerCase() === "positive" || aiResult.sentiment.toLowerCase() === "positivo"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : aiResult.sentiment.toLowerCase() === "negative" || aiResult.sentiment.toLowerCase() === "negativo"
-                              ? "bg-red-50 text-red-700"
-                              : "bg-gray-50 text-gray-700"
-                          }`}>
-                            {aiResult.sentiment}
-                          </span>
-                        </div>
-                      )}
-
-                      {aiResult.summary && (
-                        <div className="text-gray-600 leading-relaxed">
-                          <span className="font-bold text-gray-700 block mb-0.5">{locale === "pt" ? "Resumo das Notas:" : "Notes Summary:"}</span>
-                          <p className="text-[10px]">{aiResult.summary}</p>
-                        </div>
-                      )}
-
-                      {aiResult.followUpAction && (
-                        <div className="bg-amber-50/50 border border-amber-100 p-2 rounded-lg text-amber-900 mt-1">
-                          <span className="font-bold block mb-0.5 text-amber-800">{locale === "pt" ? "Próximo Passo Recomendado:" : "Recommended Next Step:"}</span>
-                          <p className="text-[10px] text-amber-700 font-medium leading-relaxed">{aiResult.followUpAction}</p>
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-                </div>
               </div>
 
               {/* Drawer Footer Buttons */}

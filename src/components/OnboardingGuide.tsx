@@ -88,13 +88,6 @@ export default function OnboardingGuide({ isOpen, onClose, onNavigateToTab }: On
           targetTab: "batch_send" as const
         },
         {
-          title: "🤖 Autopreenchimento com Inteligência Artificial",
-          description: "Chega de preenchimento manual massante! Ao abrir os detalhes de um lead e digitar notas sobre as conversas que teve com ele, você pode clicar no botão 'Autofill' (IA). O Gemini lerá suas anotações, atualizará o estágio do pipeline, extrairá a análise de sentimento, fará um resumo limpo e recomendará o próximo passo ideal.",
-          icon: <Sparkles className="w-8 h-8 text-purple-500" />,
-          tip: "Mantenha as notas ricas em detalhes (ex: 'O estudante demonstrou bastante interesse e agendou para quinta às 15h') para que o Gemini execute o preenchimento com precisão absoluta.",
-          targetTab: "batches" as const
-        },
-        {
           title: "📅 Gestão de Reuniões e Sincronização",
           description: "Na aba 'Reuniões (Meetings)', você controla as propostas de datas enviadas aos leads. Quando o lead responde ou confirma um horário, você pode registrar aqui. O melhor: você pode clicar em 'Sincronizar Calendário' e o CRM varre o seu Google Calendar buscando convites aceitos por esses leads, atualizando automaticamente os horários agendados!",
           icon: <Calendar className="w-8 h-8 text-emerald-500" />,
@@ -130,12 +123,6 @@ export default function OnboardingGuide({ isOpen, onClose, onNavigateToTab }: On
           title: "📅 Como sincronizar automaticamente com o Google Calendar?",
           category: "Automação",
           content: "O CRM oferece sincronização bidirecional simplificada com o Google Calendar:\n1. Certifique-se de estar conectado com sua conta do Workspace.\n2. Quando o lead confirmar uma reunião, clique no botão **Sincronizar Calendário** (ícone de agenda na barra superior ou no dashboard).\n3. O sistema varre os eventos do seu Google Calendar nos próximos 30 dias buscando correspondência de e-mail com os leads cadastrados.\n4. Ao encontrar um evento confirmado, o CRM atualiza automaticamente a coluna 'booked time' (horário marcado) e o status do lead para 'Booked' (Marcado) de forma instantânea."
-        },
-        {
-          id: "gemini_ai",
-          title: "🤖 Como a Inteligência Artificial (Gemini) me ajuda?",
-          category: "Inteligência Artificial",
-          content: "O CRM possui o modelo Gemini integrado diretamente para reduzir seu trabalho administrativo:\n1. Na tabela de **Batches**, clique em qualquer lead para abrir a aba lateral de detalhes.\n2. No campo **Notes**, anote resumos livres de suas ligações ou conversas (ex: 'Conversamos pelo WhatsApp, o aluno adorou o programa acadêmico, mas disse que só pode fazer a entrevista semana que vem, pediu para retornar na segunda-feira').\n3. Clique no botão azul **Autofill (Gemini)**.\n4. O Gemini analisará o texto livre e determinará automaticamente:\n   - O novo **Status** sugerido (Lead, Contatado, Reunião Marcada).\n   - Um **Resumo Limpo** e profissional da anotação.\n   - O **Sentimento** do estudante (Altamente Interessado, Neutro, Pouco Interessado).\n   - A **Próxima Ação recomendada** com prazo estimado."
         },
         {
           id: "saved_views",
@@ -195,13 +182,6 @@ export default function OnboardingGuide({ isOpen, onClose, onNavigateToTab }: On
           targetTab: "batch_send" as const
         },
         {
-          title: "🤖 AI Autofill (Gemini)",
-          description: "No more boring spreadsheet typing! When viewing a lead's details and writing informal notes about your calls, click 'Autofill' (AI). Gemini reads your raw notes, updates the pipeline status, extracts sentiment, generates a clean summary, and recommends the next best action.",
-          icon: <Sparkles className="w-8 h-8 text-purple-500" />,
-          tip: "Keep notes rich and detailed (e.g., 'Student was highly interested and scheduled a call for Thursday at 3 PM') for Gemini to autofill fields with 100% accuracy.",
-          targetTab: "batches" as const
-        },
-        {
           title: "📅 Meeting Management & Sync",
           description: "In the 'Meetings' tab, you control meeting proposals sent to leads. When a lead confirms, record it here. Better yet: click 'Sync Calendar' and the CRM automatically scans your Google Calendar for accepted meeting invitations, updating lead booking times automatically!",
           icon: <Calendar className="w-8 h-8 text-emerald-500" />,
@@ -237,12 +217,6 @@ export default function OnboardingGuide({ isOpen, onClose, onNavigateToTab }: On
           title: "📅 How to auto-sync with Google Calendar?",
           category: "Automation",
           content: "The CRM provides streamlined, two-way sync with Google Calendar:\n1. Make sure you are logged in with your Google Workspace account.\n2. When a lead books/confirms a slot, click the **Sync Calendar** button (calendar icon in the top header or on the dashboard).\n3. The system scans your Google Calendar events for the next 30 days, matching attendee emails with leads registered in your CRM.\n4. Once a confirmed match is found, the CRM automatically updates the 'booked time' column and flips the lead's status to 'Booked' instantly."
-        },
-        {
-          id: "gemini_ai",
-          title: "🤖 How does the Gemini AI help me?",
-          category: "Artificial Intelligence",
-          content: "The CRM integrates Gemini directly to save you admin time:\n1. On the **Batches** table, click any lead row to open its details sidebar.\n2. Under the **Notes** field, write down informal summaries of your calls (e.g., 'Had a quick chat on WhatsApp, student is very interested in the scholar program but requested a follow-up call on Monday morning since they are traveling right now').\n3. Click the blue **Autofill (Gemini)** button.\n4. Gemini analyzes the raw text and automatically infers:\n   - Inferred **Pipeline Status** (Lead, Contacted, Booked, etc.).\n   - A **Clean, Professional Summary** of the call notes.\n   - Student **Sentiment** (Highly Interested, Neutral, Uninterested).\n   - Recommended **Next Step** with a recommended time frame."
         },
         {
           id: "saved_views",

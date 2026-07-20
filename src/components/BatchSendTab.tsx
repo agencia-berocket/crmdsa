@@ -292,22 +292,13 @@ export default function BatchSendTab({
         const updateData: any = {
           Status: "waiting on them",
           Notes: notesWithDate,
-          "DATA DO ENVIO": todayStr,
-          "email sent": todayStr,
-          "Date Sent": todayStr,
+          "data do envio": todayStr,
+          "notif. envio": locale === "pt" ? "Enviado" : "Sent",
+          // Clear reply/open alerts upon a fresh send - they must wait for a new
+          // pixel hit / reply before being marked again.
+          "notif. retorno": "",
+          "abertura": "",
         };
-        updateData["Alerta Envio"] = locale === "pt" ? "Enviado" : "Sent";
-        updateData["Email Sent Alert"] = "Sent";
-        updateData["Alerta Retorno"] = ""; // clear reply alert upon send
-        updateData["Email Received Alert"] = "";
-        updateData["Alerta Recebido"] = "";
-        updateData["Retorno Notificação"] = "";
-        // Clear any previous "opened" alert - a new send must wait for a fresh
-        // pixel hit before it can be marked as opened again.
-        updateData["Alerta Abertura"] = "";
-        updateData["Email Opened Alert"] = "";
-        updateData["Abertura"] = "";
-        updateData["Date Opened"] = "";
 
         await updateSheetRow(
           spreadsheetId,

@@ -79,14 +79,18 @@ function getColLetter(index: number): string {
   return letter;
 }
 
+// Canonical column keys: exactly ONE set of patterns per target column, mirroring
+// CANONICAL_COLUMN_PATTERNS in src/lib/google-api.ts, so a single updates{} entry
+// can never resolve to more than one column (e.g. "Abertura" vs "Notif. Retorno").
 const COLUMN_PATTERNS_MAP: { [key: string]: string[] } = {
-  "data de abertura": ["abertura", "opened", "data de abertura", "aberto em", "data abertura"],
-  "abertura em": ["abertura", "opened", "data de abertura", "aberto em", "data abertura"],
-  "email opened alert": ["abertura", "opened", "email opened alert", "alerta abertura", "notificação abertura"],
-  "alerta abertura": ["abertura", "opened", "email opened alert", "alerta abertura", "notificação abertura"],
+  "abertura": ["abertura"],
+  "notif. envio": ["notif. envio", "notificação envio", "alerta envio", "email sent alert"],
+  "notif. retorno": ["notif. retorno", "notificação retorno", "alerta retorno", "email received alert"],
+  "data do envio": ["data do envio", "data de envio", "date sent", "data envio"],
+  "status": ["status pipeline", "status"],
 };
 
-// Server-side replica of the fuzzy header matching used in updateSheetRow (src/lib/google-api.ts),
+// Server-side replica of the canonical header matching used in updateSheetRow (src/lib/google-api.ts),
 // adapted to run with a Service Account JWT instead of a user access token.
 export async function updateSheetRowAsServiceAccount(
   spreadsheetId: string,
@@ -102,31 +106,16 @@ export async function updateSheetRowAsServiceAccount(
   const dataToUpdate: { range: string; values: string[][] }[] = [];
 
   for (const [colName, val] of Object.entries(updates)) {
-    let colIndex = headers.findIndex((h) => h.trim().toLowerCase() === colName.toLowerCase());
+    const normalized = colName.trim().toLowerCase();
+
+    let colIndex = headers.findIndex((h) => h.trim().toLowerCase() === normalized);
 
     if (colIndex === -1) {
-      colIndex = headers.findIndex((h) => {
-        const norm = h.trim().toLowerCase();
-        const isSearchingAlert =
-          colName.toLowerCase().includes("alert") ||
-          colName.toLowerCase().includes("alerta") ||
-          colName.toLowerCase().includes("notif") ||
-          colName.toLowerCase().includes("abertura") ||
-          colName.toLowerCase().includes("retorno");
-        return (
-          norm.includes(colName.toLowerCase()) &&
-          (isSearchingAlert || (!norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific")))
-        );
-      });
-    }
-
-    if (colIndex === -1) {
-      const normalized = colName.trim().toLowerCase();
       const patterns = COLUMN_PATTERNS_MAP[normalized];
       if (patterns) {
         colIndex = headers.findIndex((h) => {
           const lowerH = h.toLowerCase().trim();
-          return patterns.some((p) => lowerH.includes(p.toLowerCase()));
+          return patterns.some((p) => lowerH === p.toLowerCase() || lowerH.includes(p.toLowerCase()));
         });
       }
     }

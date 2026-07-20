@@ -135,7 +135,20 @@ export async function fetchBatches(spreadsheetId: string, sheetName = "batches")
         h.toLowerCase().includes("grupo")
     ),
     name: headers.findIndex((h) => h.toLowerCase().includes("name") || h.toLowerCase().includes("nome")),
-    status: headers.findIndex((h) => h.toLowerCase().includes("status") || h.toLowerCase().includes("etapa")),
+    status: (() => {
+      // Prioritize "Status Pipeline" (or bare "Status") over "Status Meetings",
+      // which is a distinct column tracked separately (see statusMeetings below).
+      const exactIdx = headers.findIndex((h) => {
+        const norm = h.toLowerCase().trim();
+        return norm === "status pipeline" || norm === "status";
+      });
+      if (exactIdx !== -1) return exactIdx;
+
+      return headers.findIndex((h) => {
+        const norm = h.toLowerCase();
+        return (norm.includes("status") && !norm.includes("meeting")) || norm.includes("etapa");
+      });
+    })(),
     email: (() => {
       // Prioritize finding a column containing "email", "e-mail" (excluding alerts)
       const exactEmailIdx = headers.findIndex((h) => {
@@ -515,55 +528,43 @@ export async function updateSheetRow(
 
   const dataToUpdate = [];
 
-  for (const [colName, val] of Object.entries(updates)) {
-    let colIndex = headers.findIndex((h) => h.trim().toLowerCase() === colName.toLowerCase());
-    
-    if (colIndex === -1) {
-      colIndex = headers.findIndex((h) => {
-        const norm = h.trim().toLowerCase();
-        const isSearchingAlert = colName.toLowerCase().includes("alert") || colName.toLowerCase().includes("alerta") || colName.toLowerCase().includes("notif") || colName.toLowerCase().includes("abertura") || colName.toLowerCase().includes("retorno");
-        return norm.includes(colName.toLowerCase()) && (isSearchingAlert || (!norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific")));
-      });
-    }
-    
-    // Apply fuzzy matching if the direct name-includes lookup fails
-    if (colIndex === -1) {
-      const normalized = colName.trim().toLowerCase();
-      const patternsMap: { [key: string]: string[] } = {
-        "university": ["university", "faculdade", "universidade", "escola"],
-        "student organization": ["student", "organization", "org", "club", "grupo", "entidade"],
-        "name": ["name", "nome", "estudante", "aluno"],
-        "status": ["status", "etapa", "fase"],
-        "notes": ["note", "anotação", "obs", "observações", "comentário"],
-        "email sent": ["sent", "envio", "data do envio", "data de envio", "enviado em", "data envio", "ultimo envio", "último envio"],
-        "data do envio": ["sent", "envio", "data do envio", "data de envio", "enviado em", "data envio", "ultimo envio", "último envio"],
-        "data de envio": ["sent", "envio", "data do envio", "data de envio", "enviado em", "data envio", "ultimo envio", "último envio"],
-        "email": ["email", "e-mail"], // strictly look for email patterns to avoid mistakenly overwriting Column A if it has "Contato"
-        "suggested times": ["suggested", "sugerido", "horários"],
-        "booked time": ["booked", "marcado", "data", "horário confirmado"],
-        "email opened alert": ["abertura", "opened", "email opened alert", "alerta abertura", "notificação abertura"],
-        "alerta abertura": ["abertura", "opened", "email opened alert", "alerta abertura", "notificação abertura"],
-        "abertura": ["abertura", "opened", "email opened alert", "alerta abertura", "notificação abertura"],
-        "email received alert": ["retorno", "recebido", "received alert", "email received alert", "alerta retorno", "notif. retorno"],
-        "alerta retorno": ["retorno", "recebido", "received alert", "email received alert", "alerta retorno", "notif. retorno"],
-        "alerta recebido": ["retorno", "recebido", "received alert", "email received alert", "alerta retorno", "notif. retorno"],
-        "retorno notificação": ["retorno", "recebido", "received alert", "email received alert", "alerta retorno", "notif. retorno"],
-        "notif. retorno": ["retorno", "recebido", "received alert", "email received alert", "alerta retorno", "notif. retorno"],
-        "data de abertura": ["data de abertura", "abertura em", "aberto em", "data abertura"],
-        "abertura em": ["data de abertura", "abertura em", "aberto em", "data abertura"],
-        "data de retorno": ["data de retorno", "resposta em", "retorno em", "data retorno"],
-        "resposta em": ["data de retorno", "resposta em", "retorno em", "data retorno"],
-      };
+  // Canonical column keys: exactly ONE set of patterns per target column, with no
+  // overlap between them, so a single updates{} entry can never resolve to more
+  // than one column or collide with a different concept (e.g. "Notif. Envio" vs
+  // "Data do Envio" vs "Notif. Retorno"). Callers should pass one of these exact
+  // canonical keys (case-insensitive) per column they intend to write.
+  const CANONICAL_COLUMN_PATTERNS: { [key: string]: string[] } = {
+    "university": ["university", "faculdade", "universidade", "escola"],
+    "student organization": ["student", "organization", "org", "club", "grupo", "entidade"],
+    "name": ["name", "nome", "estudante", "aluno"],
+    "status": ["status pipeline", "status"],
+    "notes": ["note", "anotação", "obs", "observações", "comentário"],
+    "email": ["email", "e-mail"],
+    "data do envio": ["data do envio", "data de envio", "date sent", "data envio"],
+    "notif. envio": ["notif. envio", "notificação envio", "alerta envio", "email sent alert"],
+    "abertura": ["abertura"],
+    "notif. retorno": ["notif. retorno", "notificação retorno", "alerta retorno", "email received alert"],
+    "suggested times": ["suggested", "sugerido", "horários sugeridos"],
+    "booked time": ["booked time", "horário confirmado", "marcado"],
+    "status meetings": ["status meetings", "status meeting"],
+    "meeting confirmation": ["confirmação reunião", "confirmacao reuniao", "meeting confirmation"],
+  };
 
-      const patterns = patternsMap[normalized];
+  for (const [colName, val] of Object.entries(updates)) {
+    const normalized = colName.trim().toLowerCase();
+
+    // 1. Exact header match (case-insensitive) — the safest and preferred path.
+    let colIndex = headers.findIndex((h) => h.trim().toLowerCase() === normalized);
+
+    // 2. Canonical pattern match — only if the caller used one of the known
+    // canonical keys above. Each key's patterns are unique to that column, so
+    // this cannot collide with another target column.
+    if (colIndex === -1) {
+      const patterns = CANONICAL_COLUMN_PATTERNS[normalized];
       if (patterns) {
         colIndex = headers.findIndex((h) => {
           const lowerH = h.toLowerCase().trim();
-          const isSearchingAlert = normalized.includes("alert") || normalized.includes("alerta") || normalized.includes("notif") || normalized.includes("abertura") || normalized.includes("retorno");
-          return (
-            patterns.some((p) => lowerH.includes(p.toLowerCase())) &&
-            (isSearchingAlert || (!lowerH.includes("alert") && !lowerH.includes("alerta") && !lowerH.includes("notific")))
-          );
+          return patterns.some((p) => lowerH === p.toLowerCase() || lowerH.includes(p.toLowerCase()));
         });
       }
     }
@@ -604,7 +605,6 @@ export async function addBatchLead(
     status: string;
     notes: string;
     email?: string;
-    emailSent?: string;
   }
 ) {
   // Fetch headers first to do fuzzy mapping and locate column indices
@@ -617,7 +617,18 @@ export async function addBatchLead(
   const univIdx = headers.findIndex((h) => h.toLowerCase().includes("university") || h.toLowerCase().includes("faculdade") || h.toLowerCase().includes("universidade"));
   const orgIdx = headers.findIndex((h) => h.toLowerCase().includes("student") || h.toLowerCase().includes("organization") || h.toLowerCase().includes("org") || h.toLowerCase().includes("grupo"));
   const nameIdx = headers.findIndex((h) => h.toLowerCase().includes("name") || h.toLowerCase().includes("nome"));
-  const statusIdx = headers.findIndex((h) => h.toLowerCase().includes("status") || h.toLowerCase().includes("etapa"));
+  const statusIdx = (() => {
+    const exactIdx = headers.findIndex((h) => {
+      const norm = h.toLowerCase().trim();
+      return norm === "status pipeline" || norm === "status";
+    });
+    if (exactIdx !== -1) return exactIdx;
+
+    return headers.findIndex((h) => {
+      const norm = h.toLowerCase();
+      return (norm.includes("status") && !norm.includes("meeting")) || norm.includes("etapa");
+    });
+  })();
   const notesIdx = headers.findIndex((h) => h.toLowerCase().includes("note") || h.toLowerCase().includes("anotação") || h.toLowerCase().includes("obs"));
   
   const emailSentIdx = headers.findIndex((h) => {
@@ -659,12 +670,10 @@ export async function addBatchLead(
     if (statusIdx !== -1) rowValues[statusIdx] = leadData.status;
     if (notesIdx !== -1) rowValues[notesIdx] = leadData.notes;
     
-    if (emailSentIdx !== -1 && emailSentIdx !== emailIdx) {
-      rowValues[emailSentIdx] = leadData.emailSent || "";
-    }
-    
+    // Note: emailSentIdx (Notif. Envio / Data do Envio) is intentionally left blank here —
+    // it must only be filled after a real email send (see updateSheetRow calls in BatchSendTab).
     if (emailIdx !== -1) {
-      rowValues[emailIdx] = leadData.email || leadData.emailSent || "";
+      rowValues[emailIdx] = leadData.email || "";
     }
   } else {
     // Fallback if sheet is completely empty without headers (creates exactly the standard 8 columns structure)
@@ -676,7 +685,7 @@ export async function addBatchLead(
       leadData.notes,                // Column E (index 4)
       "",                            // Column F (index 5) - Alerta Envio
       "",                            // Column G (index 6) - Alerta Retorno
-      leadData.email || leadData.emailSent || "" // Column H (index 7) - Email Sent (the email address)
+      leadData.email || ""           // Column H (index 7) - Email Sent (the email address)
     ];
   }
 

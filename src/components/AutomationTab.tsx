@@ -157,6 +157,7 @@ export default function AutomationTab({
           await updateSheetRow(spreadsheetId, "batches", rowIndex, {
             Status: "Opened",
             Notes: notesWithOpen,
+            "abertura": locale === "pt" ? "Aberto" : "Opened",
           });
           updatedCount++;
         }
@@ -245,15 +246,8 @@ export default function AutomationTab({
           const updateData: any = {
             Status: "Replied - waiting",
             Notes: notesWithReply,
+            "notif. retorno": locale === "pt" ? "Novo Retorno!" : "New Reply!",
           };
-          updateData["Alerta Retorno"] =
-            locale === "pt" ? "Novo Retorno!" : "New Reply!";
-          updateData["Email Received Alert"] =
-            locale === "pt" ? "Novo Retorno!" : "New Reply!";
-          updateData["Alerta Recebido"] =
-            locale === "pt" ? "Novo Retorno!" : "New Reply!";
-          updateData["Retorno Notificação"] =
-            locale === "pt" ? "Novo Retorno!" : "New Reply!";
 
           await updateSheetRow(
             spreadsheetId,
@@ -273,17 +267,10 @@ export default function AutomationTab({
             : `[${locale === "pt" ? "Automação: Resposta recebida detectada em" : "Automation: Reply received detected on"} ${todayStr}]`;
 
           const updateData: any = {
-            status: "Replied - waiting",
+            Status: "Replied - waiting",
             Notes: notesWithReply,
+            "notif. retorno": locale === "pt" ? "Novo Retorno!" : "New Reply!",
           };
-          updateData["Alerta Retorno"] =
-            locale === "pt" ? "Novo Retorno!" : "New Reply!";
-          updateData["Email Received Alert"] =
-            locale === "pt" ? "Novo Retorno!" : "New Reply!";
-          updateData["Alerta Recebido"] =
-            locale === "pt" ? "Novo Retorno!" : "New Reply!";
-          updateData["Retorno Notificação"] =
-            locale === "pt" ? "Novo Retorno!" : "New Reply!";
 
           await updateSheetRow(
             spreadsheetId,
@@ -438,13 +425,10 @@ export default function AutomationTab({
       const updateData: any = {
         Status: "waiting on them",
         Notes: updatedNotes,
+        "data do envio": todayStr,
+        "notif. envio": locale === "pt" ? "Enviado" : "Sent",
+        "notif. retorno": "", // clear reply alert upon follow up
       };
-      updateData["Alerta Envio"] = locale === "pt" ? "Enviado" : "Sent";
-      updateData["Email Sent Alert"] = locale === "pt" ? "Enviado" : "Sent";
-      updateData["Alerta Retorno"] = ""; // clear reply alert upon follow up
-      updateData["Email Received Alert"] = "";
-      updateData["Alerta Recebido"] = "";
-      updateData["Retorno Notificação"] = "";
 
       await updateSheetRow(
         spreadsheetId,
