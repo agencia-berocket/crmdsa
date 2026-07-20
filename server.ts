@@ -13,6 +13,74 @@ interface TrackEvent {
 // In-memory buffer for tracking events
 let trackedOpens: TrackEvent[] = [];
 
+const LEGAL_PAGE_STYLE = `
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 720px; margin: 0 auto; padding: 48px 24px; color: #1f2937; line-height: 1.6; }
+  h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.15rem; margin-top: 2rem; }
+  .meta { color: #6b7280; font-size: 0.9rem; margin-bottom: 2rem; }
+  a { color: #2563eb; }
+`;
+
+const PRIVACY_POLICY_HTML = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Política de Privacidade - DSA CRM</title>
+  <style>${LEGAL_PAGE_STYLE}</style>
+</head>
+<body>
+  <h1>Política de Privacidade</h1>
+  <p class="meta">The Data Savings Act (DSA CRM) &mdash; ferramenta interna de uso restrito à equipe da BeRocket.</p>
+
+  <p>Esta aplicação (&ldquo;DSA CRM&rdquo;) é uma ferramenta interna utilizada exclusivamente pela equipe da BeRocket para gestão de contatos, prospecção e acompanhamento de comunicações com organizações estudantis parceiras.</p>
+
+  <h2>1. Dados coletados</h2>
+  <p>O aplicativo acessa e processa dados da sua Conta Google exclusivamente para operar suas funcionalidades, incluindo: leitura e escrita em planilhas do Google Sheets utilizadas como base do CRM, envio e leitura de e-mails via Gmail para comunicação com contatos, e criação/consulta de eventos no Google Calendar para agendamento de reuniões.</p>
+
+  <h2>2. Uso dos dados</h2>
+  <p>Os dados acessados são utilizados apenas para o funcionamento do CRM interno (sincronização de contatos, envio de comunicações e agendamento) e não são compartilhados com terceiros, vendidos ou utilizados para publicidade.</p>
+
+  <h2>3. Armazenamento</h2>
+  <p>A planilha do Google Sheets conectada permanece como fonte única da verdade dos dados. O aplicativo não mantém uma cópia permanente independente dos seus dados fora do que é necessário para o funcionamento em tempo real da interface.</p>
+
+  <h2>4. Acesso restrito</h2>
+  <p>O uso deste aplicativo é restrito a membros autorizados da equipe da BeRocket. Não é um produto disponibilizado ao público geral.</p>
+
+  <h2>5. Contato</h2>
+  <p>Dúvidas sobre esta política podem ser enviadas para a equipe responsável pela BeRocket através dos canais internos habituais.</p>
+</body>
+</html>`;
+
+const TERMS_OF_SERVICE_HTML = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Termos de Serviço - DSA CRM</title>
+  <style>${LEGAL_PAGE_STYLE}</style>
+</head>
+<body>
+  <h1>Termos de Serviço</h1>
+  <p class="meta">The Data Savings Act (DSA CRM) &mdash; ferramenta interna de uso restrito à equipe da BeRocket.</p>
+
+  <p>Ao acessar e utilizar o DSA CRM, você concorda com os termos abaixo.</p>
+
+  <h2>1. Finalidade</h2>
+  <p>Este aplicativo é uma ferramenta interna de CRM destinada exclusivamente ao uso pela equipe da BeRocket para gestão de prospecção, comunicação e agendamento com contatos de organizações estudantis parceiras.</p>
+
+  <h2>2. Uso autorizado</h2>
+  <p>O acesso é restrito a colaboradores autorizados pela BeRocket. É vedado o uso deste aplicativo por terceiros não autorizados.</p>
+
+  <h2>3. Responsabilidade do usuário</h2>
+  <p>O usuário é responsável por manter a confidencialidade de suas credenciais de acesso e por utilizar as integrações com Google Sheets, Gmail e Google Calendar de forma condizente com as políticas internas da empresa.</p>
+
+  <h2>4. Disponibilidade</h2>
+  <p>O aplicativo é fornecido &ldquo;como está&rdquo;, sem garantias de disponibilidade contínua, podendo sofrer manutenções ou alterações a qualquer momento.</p>
+
+  <h2>5. Alterações</h2>
+  <p>Estes termos podem ser atualizados a qualquer momento para refletir mudanças no funcionamento do aplicativo.</p>
+</body>
+</html>`;
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -98,7 +166,7 @@ async function startServer() {
         apiKey,
         httpOptions: {
           headers: {
-            "User-Agent": "aistudio-build",
+            "User-Agent": "crm-data-savings-act",
           },
         },
       });
@@ -178,6 +246,14 @@ Retorne sua resposta estritamente no formato JSON especificado.
   // API Route: Health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  // Static legal pages required for OAuth consent screen verification
+  app.get("/pp", (req, res) => {
+    res.type("html").send(PRIVACY_POLICY_HTML);
+  });
+  app.get("/ts", (req, res) => {
+    res.type("html").send(TERMS_OF_SERVICE_HTML);
   });
 
   // Serve static assets or use Vite in dev
