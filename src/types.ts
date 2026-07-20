@@ -10,6 +10,18 @@ export interface BatchContact {
   emailSentAlert?: string;
   emailReceivedAlert?: string;
   emailOpenedAlert?: string;
+  dataEnvio?: string; // real timestamp of the last outbound send
+  dataAbertura?: string; // real timestamp of the email open event
+  dataRetorno?: string; // real timestamp of the reply/response event
+  meetingConfirmationStatus?: string; // Google Calendar attendee responseStatus: "accepted" | "declined" | "tentative" | "needsAction"
+  meetingDateTime?: string; // scheduled date/time of the booked Google Calendar meeting
+  role?: string; // contact's role/title at the organization
+  statusMeetings?: string; // meeting pipeline status: "New" | "Suggested Time" | "Scheduled" | "Completed"
+  suggestedTimes?: string; // human-readable list of proposed meeting slots
+  bookedTime?: string; // confirmed meeting date/time (mirrors meetingDateTime once booked)
+  notesMeetings?: string; // notes specific to the meeting, separate from prospecting notes
+  meetingConfirmation?: string; // friendly label mapped from Google Calendar attendee responseStatus
+  meetingInvitationSentOn?: string; // timestamp the calendar invite was sent
 }
 
 export interface MeetingRow {
@@ -22,6 +34,11 @@ export interface MeetingRow {
   emailSentAlert?: string;
   emailReceivedAlert?: string;
   emailOpenedAlert?: string;
+  dataEnvio?: string; // real timestamp of the last outbound send
+  dataAbertura?: string; // real timestamp of the email open event
+  dataRetorno?: string; // real timestamp of the reply/response event
+  meetingConfirmationStatus?: string; // Google Calendar attendee responseStatus: "accepted" | "declined" | "tentative" | "needsAction"
+  meetingDateTime?: string; // scheduled date/time of the booked Google Calendar meeting
 }
 
 export interface GmailAlias {

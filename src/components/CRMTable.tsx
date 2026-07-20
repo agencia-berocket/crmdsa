@@ -21,14 +21,17 @@ import {
   Settings,
   X,
   AlertTriangle,
-  Scissors,
-  Link2,
   Sparkles,
   MailCheck,
-  MessageSquareReply
+  MessageSquareReply,
+  CalendarPlus,
+  CheckCheck,
+  CalendarCheck,
+  CalendarX,
+  CalendarClock
 } from "lucide-react";
 import { BatchContact, MeetingRow } from "../types";
-import { updateSheetRow } from "../lib/google-api";
+import { updateSheetRow, createCalendarEvent, fetchFreeBusySlots } from "../lib/google-api";
 import { motion, AnimatePresence } from "motion/react";
 
 interface CRMTableProps {
@@ -71,10 +74,31 @@ export default function CRMTable({
   }, [globalSearch]);
   const [selectedRow, setSelectedRow] = useState<BatchContact | MeetingRow | null>(null);
 
+  // Meetings now live natively on the Lead record. The "meetings" view derives its
+  // rows from batchesData (Leads with a suggested/booked meeting) instead of the
+  // legacy meetings sheet, so rowIndex still points at the correct row in "batches".
+  const meetingsFromLeads = useMemo<MeetingRow[]>(() => {
+    return batchesData
+      .filter((b) => (b.suggestedTimes && b.suggestedTimes.trim()) || (b.bookedTime && b.bookedTime.trim()))
+      .map((b) => ({
+        rowIndex: b.rowIndex,
+        email: b.email || "",
+        suggestedTimes: b.suggestedTimes || "",
+        bookedTime: b.bookedTime || "",
+        notes: b.notesMeetings || "",
+        status: b.statusMeetings || "",
+        emailSentAlert: b.emailSentAlert,
+        emailReceivedAlert: b.emailReceivedAlert,
+        emailOpenedAlert: b.emailOpenedAlert,
+        meetingConfirmationStatus: b.meetingConfirmationStatus,
+        meetingDateTime: b.meetingDateTime,
+      }));
+  }, [batchesData]);
+
   // Deep linking auto-open handler
   useEffect(() => {
     if (autoOpenRowIndex) {
-      const rowToOpen = (type === "batches" ? batchesData : meetingsData).find(
+      const rowToOpen = (type === "batches" ? batchesData : meetingsFromLeads).find(
         (item) => item.rowIndex === autoOpenRowIndex
       );
       if (rowToOpen) {
@@ -83,6 +107,9 @@ export default function CRMTable({
         setEditedStatus(rowToOpen.status || "");
         setEditedNotes(rowToOpen.notes || "");
         setSaveSuccess(false);
+        setShowMeetingForm(false);
+        setMeetingDateTime("");
+        setMeetingCreated(false);
 
         if (type === "batches") {
           const b = rowToOpen as BatchContact;
@@ -102,21 +129,31 @@ export default function CRMTable({
         }
       }
     }
-  }, [autoOpenRowIndex, batchesData, meetingsData, type]);
+  }, [autoOpenRowIndex, batchesData, meetingsFromLeads, type]);
 
   // States for AI Autofill
   const [isAutofilling, setIsAutofilling] = useState(false);
   const [aiResult, setAiResult] = useState<any>(null);
 
   // State for Copied Link feedback
-  const [copiedLink, setCopiedLink] = useState(false);
-  
+
+  // States for Add Meeting (Google Calendar) card
+  const [showMeetingForm, setShowMeetingForm] = useState(false);
+  const [meetingDateTime, setMeetingDateTime] = useState("");
+  const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
+  const [meetingCreated, setMeetingCreated] = useState(false);
+  const [freeSlots, setFreeSlots] = useState<{ start: string; end: string }[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [slotsError, setSlotsError] = useState(false);
+
   // States for row editing
   const [isSaving, setIsSaving] = useState(false);
   const [editedStatus, setEditedStatus] = useState("");
   const [editedNotes, setEditedNotes] = useState("");
-  const [editedTimes, setEditedTimes] = useState(""); // For meetings suggested times
-  const [editedBooked, setEditedBooked] = useState(""); // For meetings booked time
+  const [editedTimes, setEditedTimes] = useState(""); // Suggested meeting times (batches & meetings)
+  const [editedBooked, setEditedBooked] = useState(""); // Booked meeting time (batches & meetings)
+  const [editedStatusMeetings, setEditedStatusMeetings] = useState(""); // For batches meeting pipeline status
+  const [editedNotesMeetings, setEditedNotesMeetings] = useState(""); // For batches meeting-specific notes
   const [editedUniversity, setEditedUniversity] = useState(""); // For batches university
   const [editedStudentOrg, setEditedStudentOrg] = useState(""); // For batches student organization
   const [editedName, setEditedName] = useState(""); // For batches name
@@ -150,10 +187,10 @@ export default function CRMTable({
       ];
     } else {
       const counts = {
-        New: meetingsData.filter(m => !m.status || m.status.toLowerCase().trim() === "new" || m.status.toLowerCase().trim() === "").length,
-        Sugerido: meetingsData.filter(m => m.status?.toLowerCase().trim() === "waiting on them" || m.status?.toLowerCase().trim() === "sugerido").length,
-        Scheduled: meetingsData.filter(m => m.status?.toLowerCase().trim() === "scheduled" || m.status?.toLowerCase().trim() === "booked").length,
-        Done: meetingsData.filter(m => m.status?.toLowerCase().trim() === "completed" || m.status?.toLowerCase().trim() === "realizada" || m.status?.toLowerCase().trim() === "done").length,
+        New: meetingsFromLeads.filter(m => !m.status || m.status.toLowerCase().trim() === "new" || m.status.toLowerCase().trim() === "").length,
+        Sugerido: meetingsFromLeads.filter(m => m.status?.toLowerCase().trim() === "waiting on them" || m.status?.toLowerCase().trim() === "sugerido").length,
+        Scheduled: meetingsFromLeads.filter(m => m.status?.toLowerCase().trim() === "scheduled" || m.status?.toLowerCase().trim() === "booked").length,
+        Done: meetingsFromLeads.filter(m => m.status?.toLowerCase().trim() === "completed" || m.status?.toLowerCase().trim() === "realizada" || m.status?.toLowerCase().trim() === "done").length,
       };
 
       return [
@@ -163,7 +200,7 @@ export default function CRMTable({
         { key: "Done", label: locale === "pt" ? "Realizada" : "Completed", count: counts.Done, color: "#9C27B0", statusValue: "Completed" },
       ];
     }
-  }, [type, batchesData, meetingsData, locale]);
+  }, [type, batchesData, meetingsFromLeads, locale]);
 
   // Status colors mapping for row lists
   const getStatusBadgeClass = (status: string) => {
@@ -199,10 +236,16 @@ export default function CRMTable({
       ["waiting on them", "replied - waiting", "opened", "booked"].includes(item.status?.toLowerCase().trim());
 
     if (isSent) {
+      const dataEnvio = ("dataEnvio" in item ? item.dataEnvio : undefined) || ("emailSent" in item ? item.emailSent : undefined);
       return (
-        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100 shadow-sm" title={locale === "pt" ? "E-mail Enviado" : "Email Sent"}>
-          <MailCheck className="w-3.5 h-3.5 text-emerald-600" />
-          <span>{locale === "pt" ? "Enviado" : "Sent"}</span>
+        <span className="inline-flex flex-col items-center gap-0.5">
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100 shadow-sm" title={dataEnvio ? `${locale === "pt" ? "E-mail Enviado" : "Email Sent"} (${dataEnvio})` : (locale === "pt" ? "E-mail Enviado" : "Email Sent")}>
+            <MailCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{locale === "pt" ? "Enviado" : "Sent"}</span>
+          </span>
+          {dataEnvio && (
+            <span className="text-[9px] text-emerald-500 font-mono leading-none">{dataEnvio}</span>
+          )}
         </span>
       );
     }
@@ -214,19 +257,39 @@ export default function CRMTable({
   };
 
   const renderEmailReceivedAlert = (item: BatchContact | MeetingRow) => {
-    const hasReceived = 
-      item.emailReceivedAlert?.toLowerCase().includes("retorno") || 
-      item.emailReceivedAlert?.toLowerCase().includes("reply") || 
-      item.emailReceivedAlert?.toLowerCase().includes("sim") || 
-      item.emailReceivedAlert?.toLowerCase().includes("yes") ||
-      item.emailReceivedAlert?.toLowerCase().includes("recebido") ||
-      item.status?.toLowerCase().trim() === "replied - waiting";
+    const isRead =
+      item.emailReceivedAlert?.toLowerCase().trim() === "lido" ||
+      item.emailReceivedAlert?.toLowerCase().trim() === "read";
+    const hasReceived = !isRead && hasPendingReplyAlert(item);
 
     if (hasReceived) {
+      const dataRetorno = "dataRetorno" in item ? item.dataRetorno : undefined;
       return (
-        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-extrabold border border-amber-200 shadow-sm animate-pulse" title={locale === "pt" ? "Novo E-mail de Retorno!" : "New Reply Received!"}>
-          <MessageSquareReply className="w-3.5 h-3.5 text-amber-600" />
-          <span>{locale === "pt" ? "Novo Retorno!" : "New Reply!"}</span>
+        <span className="inline-flex flex-col items-center gap-0.5">
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-extrabold border border-amber-200 shadow-sm animate-pulse" title={dataRetorno ? `${locale === "pt" ? "Novo E-mail de Retorno!" : "New Reply Received!"} (${dataRetorno})` : (locale === "pt" ? "Novo E-mail de Retorno!" : "New Reply Received!")}>
+              <MessageSquareReply className="w-3.5 h-3.5 text-amber-600" />
+              <span>{locale === "pt" ? "Novo Retorno!" : "New Reply!"}</span>
+            </span>
+            <button
+              onClick={(e) => handleMarkReplyAsRead(item, e)}
+              className="p-0.5 text-amber-600 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-all cursor-pointer"
+              title={locale === "pt" ? "Marcar como lido" : "Mark as read"}
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+            </button>
+          </span>
+          {dataRetorno && (
+            <span className="text-[9px] text-amber-500 font-mono leading-none">{dataRetorno}</span>
+          )}
+        </span>
+      );
+    }
+    if (isRead) {
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-50 text-gray-500 text-[10px] font-semibold border border-gray-200" title={locale === "pt" ? "Retorno Lido" : "Reply Read"}>
+          <CheckCheck className="w-3.5 h-3.5 text-gray-400" />
+          <span>{locale === "pt" ? "Lido" : "Read"}</span>
         </span>
       );
     }
@@ -238,18 +301,26 @@ export default function CRMTable({
   };
 
   const renderEmailOpenedAlert = (item: BatchContact | MeetingRow) => {
-    const isOpened = 
-      item.emailOpenedAlert?.toLowerCase().includes("aberto") || 
-      item.emailOpenedAlert?.toLowerCase().includes("open") || 
-      item.emailOpenedAlert?.toLowerCase().includes("sim") || 
-      item.emailOpenedAlert?.toLowerCase().includes("yes") ||
-      ["opened", "replied - waiting", "booked"].includes(item.status?.toLowerCase().trim());
+    // Only trust the real pixel-tracked "opened" alert column - never infer
+    // "opened" from a pipeline status like "replied - waiting" or "booked",
+    // since a client can reply or book without the tracking pixel ever firing.
+    const isOpened =
+      item.emailOpenedAlert?.toLowerCase().includes("aberto") ||
+      item.emailOpenedAlert?.toLowerCase().includes("open") ||
+      item.emailOpenedAlert?.toLowerCase().includes("sim") ||
+      item.emailOpenedAlert?.toLowerCase().includes("yes");
 
     if (isOpened) {
+      const dataAbertura = "dataAbertura" in item ? item.dataAbertura : undefined;
       return (
-        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 text-[10px] font-bold border border-teal-100 shadow-sm" title={locale === "pt" ? "E-mail Aberto" : "Email Opened"}>
-          <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></span>
-          <span>{locale === "pt" ? "Aberto" : "Opened"}</span>
+        <span className="inline-flex flex-col items-center gap-0.5">
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 text-[10px] font-bold border border-teal-100 shadow-sm" title={dataAbertura ? `${locale === "pt" ? "E-mail Aberto" : "Email Opened"} (${dataAbertura})` : (locale === "pt" ? "E-mail Aberto" : "Email Opened")}>
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></span>
+            <span>{locale === "pt" ? "Aberto" : "Opened"}</span>
+          </span>
+          {dataAbertura && (
+            <span className="text-[9px] text-teal-500 font-mono leading-none">{dataAbertura}</span>
+          )}
         </span>
       );
     }
@@ -260,15 +331,63 @@ export default function CRMTable({
     );
   };
 
+  const renderMeetingConfirmationBadge = (item: BatchContact | MeetingRow) => {
+    const raw = (item.meetingConfirmationStatus || "").toLowerCase().trim();
+
+    if (!raw) {
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-50/50 text-gray-300 text-[10px]">
+          <span>—</span>
+        </span>
+      );
+    }
+
+    const isAccepted = raw.includes("confirmada") || raw.includes("confirmed") || raw.includes("accepted");
+    const isDeclined = raw.includes("recusada") || raw.includes("declined");
+    const isTentative = raw.includes("talvez") || raw.includes("tentative");
+
+    if (isAccepted) {
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100 shadow-sm" title={item.meetingConfirmationStatus}>
+          <CalendarCheck className="w-3.5 h-3.5 text-emerald-600" />
+          <span>{locale === "pt" ? "Confirmada" : "Confirmed"}</span>
+        </span>
+      );
+    }
+    if (isDeclined) {
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 text-red-700 text-[10px] font-bold border border-red-100 shadow-sm" title={item.meetingConfirmationStatus}>
+          <CalendarX className="w-3.5 h-3.5 text-red-600" />
+          <span>{locale === "pt" ? "Recusada" : "Declined"}</span>
+        </span>
+      );
+    }
+    if (isTentative) {
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-100 shadow-sm" title={item.meetingConfirmationStatus}>
+          <CalendarClock className="w-3.5 h-3.5 text-amber-600" />
+          <span>{locale === "pt" ? "Talvez" : "Tentative"}</span>
+        </span>
+      );
+    }
+    // Pendente / needsAction / any other value
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50/60 text-amber-600 text-[10px] font-semibold border border-amber-100" title={item.meetingConfirmationStatus}>
+        <CalendarClock className="w-3.5 h-3.5 text-amber-500" />
+        <span>{locale === "pt" ? "Pendente" : "Pending"}</span>
+      </span>
+    );
+  };
+
   // List of all unique statuses found to populate filter pills
   const availableStatuses = useMemo(() => {
-    const rawList = type === "batches" 
-      ? batchesData.map(c => c.status) 
-      : meetingsData.map(m => m.status);
-    
+    const rawList = type === "batches"
+      ? batchesData.map(c => c.status)
+      : meetingsFromLeads.map(m => m.status);
+
     const unique = Array.from(new Set(rawList.map(s => s?.trim() || ""))).filter(Boolean);
     return ["All", ...unique];
-  }, [type, batchesData, meetingsData]);
+  }, [type, batchesData, meetingsFromLeads]);
 
   // Filter & Search application
   const filteredData = useMemo(() => {
@@ -324,7 +443,7 @@ export default function CRMTable({
         return matchesSearch && matchesStatus;
       });
     } else {
-      let data = meetingsData;
+      let data = meetingsFromLeads;
 
       if (savedViewFilter) {
         if (savedViewFilter === "waiting_on_us") {
@@ -354,7 +473,7 @@ export default function CRMTable({
         return matchesSearch && matchesStatus;
       });
     }
-  }, [type, batchesData, meetingsData, searchTerm, statusFilter, savedViewFilter]);
+  }, [type, batchesData, meetingsFromLeads, searchTerm, statusFilter, savedViewFilter]);
 
   // Selection toggles
   const handleSelectAll = (checked: boolean) => {
@@ -379,6 +498,45 @@ export default function CRMTable({
     onSelectRowChange(indexes);
   };
 
+  // Mark a "new reply" alert as read/seen. Triggered explicitly via the
+  // "mark as read" button, and automatically when the row's detail modal is opened.
+  const handleMarkReplyAsRead = (item: BatchContact | MeetingRow, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    const readLabel = locale === "pt" ? "Lido" : "Read";
+    const updates: { [key: string]: string } = {};
+    updates["Alerta Retorno"] = readLabel;
+    updates["Email Received Alert"] = readLabel;
+    updates["Alerta Recebido"] = readLabel;
+    updates["Retorno Notificação"] = readLabel;
+    updates["Notif. Retorno"] = readLabel;
+
+    // Meetings now live natively on the Lead record, so both views write to "batches".
+    updateSheetRow(spreadsheetId, "batches", item.rowIndex, updates)
+      .then(() => {
+        onRefresh();
+        setSelectedRow((prev) => {
+          if (!prev || prev.rowIndex !== item.rowIndex) return prev;
+          return { ...prev, emailReceivedAlert: readLabel };
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to mark reply notification as read:", err);
+        alert(
+          locale === "pt"
+            ? "Houve um erro ao marcar a notificação como lida. Tente novamente."
+            : "There was an error marking the notification as read. Please try again."
+        );
+      });
+  };
+
+  const hasPendingReplyAlert = (item: BatchContact | MeetingRow) =>
+    item.emailReceivedAlert?.toLowerCase().includes("retorno") ||
+    item.emailReceivedAlert?.toLowerCase().includes("reply") ||
+    item.emailReceivedAlert?.toLowerCase().includes("sim") ||
+    item.emailReceivedAlert?.toLowerCase().includes("yes") ||
+    item.emailReceivedAlert?.toLowerCase().includes("recebido");
+
   // Open Edit drawer
   const handleOpenRowDetail = (item: BatchContact | MeetingRow) => {
     // Clone the item to prevent modifying frozen state/prop objects
@@ -396,6 +554,10 @@ export default function CRMTable({
       setEditedName(b.name || "");
       setEditedEmail(b.email || "");
       setEditedEmailSent(b.emailSent || "");
+      setEditedTimes(b.suggestedTimes || "");
+      setEditedBooked(b.bookedTime || "");
+      setEditedStatusMeetings(b.statusMeetings || "");
+      setEditedNotesMeetings(b.notesMeetings || "");
     } else {
       const m = clonedItem as MeetingRow;
       setEditedEmail(m.email || "");
@@ -403,36 +565,14 @@ export default function CRMTable({
       setEditedBooked(m.bookedTime || "");
       setEditedEmailSent("");
     }
+    setShowMeetingForm(false);
+    setMeetingDateTime("");
+    setFreeSlots([]);
+    setSlotsError(false);
 
-    // Automatically clear reply alert and open status when opening the drawer
-    const hasReceivedAlert = 
-      clonedItem.emailReceivedAlert?.toLowerCase().includes("retorno") || 
-      clonedItem.emailReceivedAlert?.toLowerCase().includes("reply") || 
-      clonedItem.emailReceivedAlert?.toLowerCase().includes("sim") || 
-      clonedItem.emailReceivedAlert?.toLowerCase().includes("yes") ||
-      clonedItem.emailReceivedAlert?.toLowerCase().includes("recebido") ||
-      clonedItem.status?.toLowerCase().trim() === "replied - waiting";
-
-    if (hasReceivedAlert) {
-      // Clear reply alerts silently on the sheet
-      const updates: { [key: string]: string } = {};
-      updates["Alerta Retorno"] = "";
-      updates["Email Received Alert"] = "";
-      updates["Alerta Recebido"] = "";
-      updates["Retorno Notificação"] = "";
-      updates["Notif. Retorno"] = "";
-      
-      // Update local state item immediately so UI updates instantly
-      clonedItem.emailReceivedAlert = "";
-      
-      updateSheetRow(spreadsheetId, type === "batches" ? "batches" : "meetings", clonedItem.rowIndex, updates)
-        .then(() => {
-          console.log(`[CRMTable] Silently cleared reply notification for row ${clonedItem.rowIndex}`);
-          onRefresh();
-        })
-        .catch((err) => {
-          console.warn("Failed to clear reply notification silently:", err);
-        });
+    // Opening a client's reply email marks the pending "new reply" alert as read.
+    if (hasPendingReplyAlert(clonedItem)) {
+      handleMarkReplyAsRead(clonedItem);
     }
   };
 
@@ -446,18 +586,99 @@ export default function CRMTable({
     } else {
       const row = selectedRow as MeetingRow;
       if (!row.email) return false;
-      return meetingsData.filter(m => m.email && m.email.toLowerCase().trim() === row.email.toLowerCase().trim()).length > 1;
+      return meetingsFromLeads.filter(m => m.email && m.email.toLowerCase().trim() === row.email.toLowerCase().trim()).length > 1;
     }
-  }, [selectedRow, batchesData, meetingsData, type]);
+  }, [selectedRow, batchesData, meetingsFromLeads, type]);
 
-  // Copy deep-link sharing URL to clipboard
-  const handleCopyDeepLink = () => {
-    if (!selectedRow) return;
-    const shareUrl = `${window.location.origin}${window.location.pathname}?tab=${type}&row=${selectedRow.rowIndex}`;
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2000);
-    });
+  // Open the meeting scheduling form and fetch real free/busy slots from Google Calendar
+  const handleOpenMeetingForm = async () => {
+    setShowMeetingForm(true);
+    setSlotsError(false);
+    setIsLoadingSlots(true);
+    try {
+      const slots = await fetchFreeBusySlots({});
+      setFreeSlots(slots);
+    } catch (error) {
+      console.error("Erro ao buscar horários livres no Google Calendar:", error);
+      setSlotsError(true);
+      setFreeSlots([]);
+    } finally {
+      setIsLoadingSlots(false);
+    }
+  };
+
+  // Create a Google Calendar event/invite for the current lead
+  const handleCreateMeeting = async () => {
+    if (!selectedRow || !meetingDateTime) return;
+
+    const attendeeEmail = type === "batches" ? (selectedRow as BatchContact).email : (selectedRow as MeetingRow).email;
+    if (!attendeeEmail || !attendeeEmail.includes("@")) {
+      alert(
+        locale === "pt"
+          ? "Este lead não possui um e-mail de contato válido para enviar o convite."
+          : "This lead doesn't have a valid contact email to send the invite to."
+      );
+      return;
+    }
+
+    const leadName = type === "batches" ? (selectedRow as BatchContact).name : attendeeEmail;
+    const leadOrg = type === "batches"
+      ? ((selectedRow as BatchContact).university || (selectedRow as BatchContact).studentOrganization)
+      : "";
+
+    const summary = leadOrg
+      ? `Reunião com ${leadName} - ${leadOrg}`
+      : `Reunião com ${leadName}`;
+
+    setIsCreatingMeeting(true);
+    setMeetingCreated(false);
+
+    try {
+      await createCalendarEvent({
+        summary,
+        description: editedNotes || undefined,
+        attendeeEmail,
+        startDateTime: meetingDateTime,
+      });
+
+      const nowStr = new Date().toLocaleString(locale === "pt" ? "pt-BR" : "en-US");
+      const scheduledStr = new Date(meetingDateTime).toLocaleString(locale === "pt" ? "pt-BR" : "en-US");
+      // Meetings now live natively on the Lead record, so both views write to "batches".
+      const sheetName = "batches";
+      const meetingUpdates: { [key: string]: string } = {
+        "Meeting Invitation Sent On": nowStr,
+        "Meeting Date/Time": scheduledStr,
+        "booked time": scheduledStr,
+        "status meetings": "Scheduled",
+      };
+      await updateSheetRow(spreadsheetId, sheetName, selectedRow.rowIndex, meetingUpdates);
+
+      setMeetingCreated(true);
+      setShowMeetingForm(false);
+      setMeetingDateTime("");
+      setFreeSlots([]);
+      setEditedBooked(scheduledStr);
+      if (type === "batches") setEditedStatusMeetings("Scheduled");
+      setSelectedRow((prev) => (prev ? { ...prev, meetingDateTime: scheduledStr, bookedTime: scheduledStr } : null));
+      onRefresh();
+
+      alert(
+        locale === "pt"
+          ? "Convite de reunião enviado com sucesso! O lead receberá o e-mail do Google Calendar."
+          : "Meeting invite sent successfully! The lead will receive the Google Calendar email."
+      );
+
+      setTimeout(() => setMeetingCreated(false), 2500);
+    } catch (error) {
+      console.error("Erro ao criar evento no Google Calendar:", error);
+      alert(
+        locale === "pt"
+          ? "Houve um erro ao criar o evento no Google Calendar. Verifique sua conexão e permissões e tente novamente."
+          : "There was an error creating the Google Calendar event. Please check your connection and permissions and try again."
+      );
+    } finally {
+      setIsCreatingMeeting(false);
+    }
   };
 
   // Execute AI Autofill analysis on lead notes
@@ -528,27 +749,34 @@ export default function CRMTable({
     setSaveSuccess(false);
 
     try {
-      const sheetName = type === "batches" ? "batches" : "meetings";
-      
+      // Meetings now live natively on the Lead record, so both views write to "batches".
+      const sheetName = "batches";
+
       const updates: { [key: string]: string } = {
-        Status: editedStatus,
-        Notes: editedNotes,
+        "suggested times": editedTimes,
+        "booked time": editedBooked,
       };
 
       if (type === "batches") {
+        updates["Status"] = editedStatus;
+        updates["Notes"] = editedNotes;
         updates["university"] = editedUniversity;
         updates["student organization"] = editedStudentOrg;
         updates["name"] = editedName;
         updates["email"] = editedEmail;
         updates["email sent"] = editedEmailSent;
+        updates["status meetings"] = editedStatusMeetings;
+        updates["notes meetings"] = editedNotesMeetings;
       } else {
+        // Meetings view: editedStatus/editedNotes here represent the meeting's own
+        // status/notes, not the Lead's prospecting pipeline — map them accordingly.
         updates["email"] = editedEmail;
-        updates["suggested times"] = editedTimes;
-        updates["booked time"] = editedBooked;
+        updates["status meetings"] = editedStatus;
+        updates["notes meetings"] = editedNotes;
       }
 
       await updateSheetRow(spreadsheetId, sheetName, selectedRow.rowIndex, updates);
-      
+
       setSaveSuccess(true);
       onRefresh(); // reload data in parent
 
@@ -565,6 +793,10 @@ export default function CRMTable({
             notes: editedNotes,
             email: editedEmail,
             emailSent: editedEmailSent,
+            suggestedTimes: editedTimes,
+            bookedTime: editedBooked,
+            statusMeetings: editedStatusMeetings,
+            notesMeetings: editedNotesMeetings,
           } as BatchContact;
         } else {
           return {
@@ -760,7 +992,8 @@ export default function CRMTable({
                       <th className="py-2.5 px-4 w-32 border-r border-gray-200">{locale === "pt" ? "Data do Envio" : "Date Sent"}</th>
                       <th className="py-2.5 px-4 w-28 border-r border-gray-200">{locale === "pt" ? "Notif. Envio" : "Sent Alert"}</th>
                       <th className="py-2.5 px-4 w-28 border-r border-gray-200">{locale === "pt" ? "Abertura" : "Open Alert"}</th>
-                      <th className="py-2.5 px-4 w-28">{locale === "pt" ? "Notif. Retorno" : "Reply Alert"}</th>
+                      <th className="py-2.5 px-4 w-28 border-r border-gray-200">{locale === "pt" ? "Notif. Retorno" : "Reply Alert"}</th>
+                      <th className="py-2.5 px-4 w-28">{locale === "pt" ? "Confirmação Reunião" : "Meeting Confirmation"}</th>
                     </>
                   ) : (
                     <>
@@ -770,7 +1003,8 @@ export default function CRMTable({
                       <th className="py-2.5 px-4 w-36 border-r border-gray-200">{locale === "pt" ? "Status" : "Status"}</th>
                       <th className="py-2.5 px-4 w-28 border-r border-gray-200">{locale === "pt" ? "Notif. Envio" : "Sent Alert"}</th>
                       <th className="py-2.5 px-4 w-28 border-r border-gray-200">{locale === "pt" ? "Abertura" : "Open Alert"}</th>
-                      <th className="py-2.5 px-4 w-28">{locale === "pt" ? "Notif. Retorno" : "Reply Alert"}</th>
+                      <th className="py-2.5 px-4 w-28 border-r border-gray-200">{locale === "pt" ? "Notif. Retorno" : "Reply Alert"}</th>
+                      <th className="py-2.5 px-4 w-28">{locale === "pt" ? "Confirmação Reunião" : "Meeting Confirmation"}</th>
                     </>
                   )}
                   <th className="py-2.5 px-4 w-14 text-center border-l border-gray-200">{locale === "pt" ? "Ver" : "View"}</th>
@@ -829,8 +1063,11 @@ export default function CRMTable({
                           <td className="py-2 px-4 border-r border-gray-100 text-center">
                             {renderEmailOpenedAlert(item as BatchContact)}
                           </td>
-                          <td className="py-2 px-4 text-center">
+                          <td className="py-2 px-4 border-r border-gray-100 text-center">
                             {renderEmailReceivedAlert(item as BatchContact)}
+                          </td>
+                          <td className="py-2 px-4 text-center">
+                            {renderMeetingConfirmationBadge(item as BatchContact)}
                           </td>
                         </>
                       ) : (
@@ -862,8 +1099,11 @@ export default function CRMTable({
                           <td className="py-2 px-4 border-r border-gray-100 text-center">
                             {renderEmailOpenedAlert(item as MeetingRow)}
                           </td>
-                          <td className="py-2 px-4 text-center">
+                          <td className="py-2 px-4 border-r border-gray-100 text-center">
                             {renderEmailReceivedAlert(item as MeetingRow)}
+                          </td>
+                          <td className="py-2 px-4 text-center">
+                            {renderMeetingConfirmationBadge(item as MeetingRow)}
                           </td>
                         </>
                       )}
@@ -909,17 +1149,6 @@ export default function CRMTable({
                   </h3>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={handleCopyDeepLink}
-                    className="p-1.5 hover:bg-indigo-100/50 rounded-lg text-indigo-600 transition-colors flex items-center justify-center cursor-pointer"
-                    title={locale === "pt" ? "Copiar Link de Compartilhamento (Share Link)" : "Copy Share Link"}
-                  >
-                    {copiedLink ? (
-                      <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">{locale === "pt" ? "Copiado!" : "Copied!"}</span>
-                    ) : (
-                      <Link2 className="w-4 h-4" />
-                    )}
-                  </button>
                   <button
                     onClick={() => setSelectedRow(null)}
                     className="p-1.5 hover:bg-gray-100 rounded-full text-gray-500 transition-colors cursor-pointer"
@@ -1075,46 +1304,98 @@ export default function CRMTable({
                   </select>
                 </div>
 
-                {/* Additional Meeting Specific Editors */}
-                {type === "meetings" && (
-                  <>
+                {/* Meeting Section — now native to the Lead record */}
+                <div className="border border-gray-200 rounded-2xl p-3.5 flex flex-col gap-2.5 bg-gray-50/60">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                    {locale === "pt" ? "Reunião" : "Meeting"}
+                  </span>
+
+                  {type === "batches" && (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                        {locale === "pt" ? "Horários Sugeridos:" : "Suggested Times:"}
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-purple-600" />
+                        {locale === "pt" ? "Status da Reunião:" : "Meeting Status:"}
+                      </label>
+                      <select
+                        value={editedStatusMeetings}
+                        onChange={(e) => setEditedStatusMeetings(e.target.value)}
+                        className="w-full text-xs font-medium bg-white border border-gray-200 rounded-lg px-3 py-2 text-gray-800 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                        id="status-meetings-select-editor"
+                      >
+                        <option value="">{locale === "pt" ? "Sem Reunião" : "No Meeting"}</option>
+                        <option value="New">{locale === "pt" ? "Novos Convites (New)" : "New Invites"}</option>
+                        <option value="waiting on them">{locale === "pt" ? "Horário Sugerido (waiting on them)" : "Suggested Time"}</option>
+                        <option value="Scheduled">{locale === "pt" ? "Agendado (Scheduled)" : "Scheduled"}</option>
+                        <option value="Completed">{locale === "pt" ? "Realizada (Completed)" : "Completed"}</option>
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                      {locale === "pt" ? "Horários Sugeridos:" : "Suggested Times:"}
+                    </label>
+                    <textarea
+                      value={editedTimes}
+                      onChange={(e) => setEditedTimes(e.target.value)}
+                      placeholder={locale === "pt" ? "Ex: Seg 10:00, Ter 14:00" : "Ex: Mon 10:00 AM, Tue 2:00 PM"}
+                      className="w-full text-xs bg-white border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono"
+                      rows={2}
+                      id="suggested-times-editor"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5">
+                      <CheckCircle className="w-3.5 h-3.5 text-purple-600" />
+                      {locale === "pt" ? "Horário Confirmado (Manual/Calendar):" : "Confirmed Time (Manual/Calendar):"}
+                    </label>
+                    <input
+                      type="text"
+                      value={editedBooked}
+                      onChange={(e) => setEditedBooked(e.target.value)}
+                      placeholder="Ex: 16/07/2026 14:00"
+                      className="w-full text-xs bg-white border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono"
+                      id="booked-time-editor"
+                    />
+                  </div>
+
+                  {type === "batches" && (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                        {locale === "pt" ? "Notas da Reunião:" : "Meeting Notes:"}
                       </label>
                       <textarea
-                        value={editedTimes}
-                        onChange={(e) => setEditedTimes(e.target.value)}
-                        placeholder={locale === "pt" ? "Ex: Seg 10:00, Ter 14:00" : "Ex: Mon 10:00 AM, Tue 2:00 PM"}
-                        className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono"
+                        value={editedNotesMeetings}
+                        onChange={(e) => setEditedNotesMeetings(e.target.value)}
+                        placeholder={locale === "pt" ? "Notas específicas sobre a reunião..." : "Meeting-specific notes..."}
+                        className="w-full text-xs bg-white border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all"
                         rows={2}
-                        id="suggested-times-editor"
+                        id="notes-meetings-editor"
                       />
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5">
-                        <CheckCircle className="w-3.5 h-3.5 text-purple-600" />
-                        {locale === "pt" ? "Horário Confirmado (Manual/Calendar):" : "Confirmed Time (Manual/Calendar):"}
-                      </label>
-                      <input
-                        type="text"
-                        value={editedBooked}
-                        onChange={(e) => setEditedBooked(e.target.value)}
-                        placeholder="Ex: 16/07/2026 14:00"
-                        className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono"
-                        id="booked-time-editor"
-                      />
-                    </div>
-                  </>
-                )}
+                  )}
+                </div>
 
                 {/* Notes Text Area Editor */}
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                    {locale === "pt" ? "Notas de Prospecção (Notes):" : "Prospecting Notes:"}
-                  </label>
+                  <div className="flex items-center justify-between gap-1.5">
+                    <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                      {locale === "pt" ? "Notas de Prospecção (Notes):" : "Prospecting Notes:"}
+                    </label>
+                    {selectedRow && hasPendingReplyAlert(selectedRow) && (
+                      <button
+                        onClick={() => handleMarkReplyAsRead(selectedRow)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 hover:bg-emerald-50 text-amber-700 hover:text-emerald-700 border border-amber-200 hover:border-emerald-200 text-[10px] font-bold transition-all cursor-pointer select-none"
+                        title={locale === "pt" ? "Marcar notificação de retorno como lida" : "Mark reply notification as read"}
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        {locale === "pt" ? "Marcar retorno como lido" : "Mark reply as read"}
+                      </button>
+                    )}
+                  </div>
                   <textarea
                     value={editedNotes}
                     onChange={(e) => setEditedNotes(e.target.value)}
@@ -1125,41 +1406,129 @@ export default function CRMTable({
                   />
                 </div>
 
-                {/* Email Thread Splitter & Link Generator Simulation */}
+                {/* Add Meeting - Google Calendar invite */}
                 <div className="border border-dashed border-indigo-200 rounded-2xl p-3.5 flex flex-col gap-2.5 bg-indigo-50/10">
-                  <span className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block">
-                    {locale === "pt" ? "Compartilhamento & Thread Splitter" : "Sharing & Thread Splitter"}
-                  </span>
-                  <p className="text-[10px] text-gray-400">
-                    {locale === "pt" ? "Gere um link público para anexar às notas ou dividir a thread do e-mail de prospecção." : "Generate a public link to attach to notes or split the prospecting email thread."}
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        const randomThreadId = Math.random().toString(36).substring(2, 10);
-                        const simulateUrl = `https://mail.google.com/mail/#inbox/${randomThreadId}`;
-                        setEditedNotes(prev => prev + `\n\n[Conversa Compartilhada: ${simulateUrl}]`);
-                        alert(locale === "pt" ? "Sucesso! O link da thread compartilhada foi anexado às notas de prospecção." : "Success! The shared thread link has been attached to prospecting notes.");
-                      }}
-                      className="flex-1 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-[10px] font-bold py-2 px-2.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer select-none"
-                    >
-                      <Link2 className="w-3.5 h-3.5 text-indigo-500" />
-                      {locale === "pt" ? "Vincular Conversa" : "Link Thread"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        const randomThreadId = Math.random().toString(36).substring(2, 10);
-                        const simulateUrl1 = `https://mail.google.com/mail/#inbox/${randomThreadId}-splitA`;
-                        const simulateUrl2 = `https://mail.google.com/mail/#inbox/${randomThreadId}-splitB`;
-                        setEditedNotes(prev => prev + `\n\n[Thread Dividida A: ${simulateUrl1}]\n[Thread Dividida B: ${simulateUrl2}]`);
-                        alert(locale === "pt" ? "Thread dividida! Duas conversas independentes foram geradas e vinculadas." : "Thread split! Two independent conversations have been generated and linked.");
-                      }}
-                      className="flex-1 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-[10px] font-bold py-2 px-2.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer select-none"
-                    >
-                      <Scissors className="w-3.5 h-3.5 text-indigo-500" />
-                      {locale === "pt" ? "Dividir Thread" : "Split Thread"}
-                    </button>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block">
+                      {locale === "pt" ? "Agendar Convite" : "Schedule Invite"}
+                    </span>
+                    {renderMeetingConfirmationBadge(selectedRow)}
                   </div>
+                  <p className="text-[10px] text-gray-400">
+                    {locale === "pt"
+                      ? "Crie um evento no Google Calendar e envie o convite automaticamente por e-mail para este lead."
+                      : "Create a Google Calendar event and automatically email the invite to this lead."}
+                  </p>
+
+                  {(selectedRow as BatchContact | MeetingRow).meetingDateTime && (
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1.5">
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>
+                        {locale === "pt" ? "Agendada para: " : "Scheduled for: "}
+                        {(selectedRow as BatchContact | MeetingRow).meetingDateTime}
+                      </span>
+                    </div>
+                  )}
+
+                  {!showMeetingForm ? (
+                    <button
+                      onClick={handleOpenMeetingForm}
+                      className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-[10px] font-bold py-2 px-2.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer select-none"
+                    >
+                      <CalendarPlus className="w-3.5 h-3.5 text-indigo-500" />
+                      {locale === "pt" ? "Adicionar Reunião" : "Add Meeting"}
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      <div className="text-[10px] font-bold text-gray-600 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5">
+                        {locale === "pt" ? "Agendando para: " : "Scheduling for: "}
+                        <span className="text-indigo-700">
+                          {type === "batches" ? (selectedRow as BatchContact).name || "" : ""}
+                          {" "}({type === "batches" ? (selectedRow as BatchContact).email : (selectedRow as MeetingRow).email})
+                        </span>
+                      </div>
+
+                      <label className="text-[10px] font-bold text-gray-500">
+                        {locale === "pt" ? "Horários Disponíveis (Google Calendar):" : "Available Slots (Google Calendar):"}
+                      </label>
+
+                      {isLoadingSlots ? (
+                        <div className="flex items-center justify-center gap-2 text-[10px] text-gray-500 py-3">
+                          <div className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                          {locale === "pt" ? "Buscando horários..." : "Fetching available slots..."}
+                        </div>
+                      ) : slotsError ? (
+                        <p className="text-[10px] text-red-500">
+                          {locale === "pt"
+                            ? "Não foi possível buscar os horários do Google Calendar."
+                            : "Could not fetch slots from Google Calendar."}
+                        </p>
+                      ) : freeSlots.length === 0 ? (
+                        <p className="text-[10px] text-gray-400 italic">
+                          {locale === "pt" ? "Nenhum horário livre encontrado." : "No free slots found."}
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto pr-1">
+                          {freeSlots.map((slot) => (
+                            <button
+                              key={slot.start}
+                              onClick={() => setMeetingDateTime(slot.start.slice(0, 16))}
+                              className={`text-[10px] font-bold py-1.5 px-2 rounded-lg border transition-all cursor-pointer select-none ${
+                                meetingDateTime === slot.start.slice(0, 16)
+                                  ? "bg-indigo-600 text-white border-indigo-600"
+                                  : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300"
+                              }`}
+                            >
+                              {new Date(slot.start).toLocaleString(locale === "pt" ? "pt-BR" : "en-US", {
+                                weekday: "short",
+                                day: "2-digit",
+                                month: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 mt-1">
+                        <button
+                          onClick={handleCreateMeeting}
+                          disabled={isCreatingMeeting || !meetingDateTime}
+                          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold py-2 px-2.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer select-none disabled:opacity-50"
+                        >
+                          {isCreatingMeeting ? (
+                            <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <CalendarPlus className="w-3.5 h-3.5" />
+                          )}
+                          {locale === "pt" ? "Enviar Convite" : "Send Invite"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowMeetingForm(false);
+                            setMeetingDateTime("");
+                            setFreeSlots([]);
+                          }}
+                          disabled={isCreatingMeeting}
+                          className="flex-1 bg-white hover:bg-gray-50 text-gray-600 border border-gray-300 text-[10px] font-bold py-2 px-2.5 rounded-lg transition-all cursor-pointer select-none disabled:opacity-50"
+                        >
+                          {locale === "pt" ? "Cancelar" : "Cancel"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {meetingCreated && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center gap-1.5 text-emerald-600 text-[10px] font-bold"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{locale === "pt" ? "Convite enviado com sucesso!" : "Invite sent successfully!"}</span>
+                    </motion.div>
+                  )}
                 </div>
 
                 {/* AI Autofill Powered by Gemini */}

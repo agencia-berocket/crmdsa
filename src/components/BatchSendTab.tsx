@@ -1,20 +1,24 @@
 import React, { useState, useEffect } from "react";
-import { 
-  Mail, 
-  Send, 
-  User, 
-  ChevronRight, 
-  ChevronLeft, 
-  Sparkles, 
-  AlertCircle, 
+import {
+  Mail,
+  Send,
+  User,
+  ChevronRight,
+  ChevronLeft,
+  Sparkles,
+  AlertCircle,
   CheckCircle,
   HelpCircle,
   RefreshCw,
   Sliders,
-  MailWarning
+  MailWarning,
 } from "lucide-react";
 import { BatchContact, GmailAlias } from "../types";
-import { sendGmailMessage, fetchGmailAliases, updateSheetRow } from "../lib/google-api";
+import {
+  sendGmailMessage,
+  fetchGmailAliases,
+  updateSheetRow,
+} from "../lib/google-api";
 import { useI18n } from "../lib/i18n";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -23,15 +27,17 @@ interface BatchSendTabProps {
   selectedContacts: BatchContact[];
   onRefresh: () => void;
   onClearSelection?: () => void;
-  onNavigate?: (tab: "home" | "batches" | "meetings" | "batch_send" | "automation") => void;
+  onNavigate?: (
+    tab: "home" | "batches" | "meetings" | "batch_send" | "automation",
+  ) => void;
 }
 
-export default function BatchSendTab({ 
-  spreadsheetId, 
-  selectedContacts, 
+export default function BatchSendTab({
+  spreadsheetId,
+  selectedContacts,
   onRefresh,
   onClearSelection,
-  onNavigate
+  onNavigate,
 }: BatchSendTabProps) {
   const { t, locale } = useI18n();
   const [aliases, setAliases] = useState<GmailAlias[]>([]);
@@ -53,21 +59,24 @@ export default function BatchSendTab({
 
   // Email Template State
   const [subject, setSubject] = useState(
-    locale === "pt" 
-      ? "Proposta de Parceria Universitária - {{University}}" 
-      : "University Partnership Proposal - {{University}}"
+    locale === "pt"
+      ? "Proposta de Parceria Universitária - {{University}}"
+      : "University Partnership Proposal - {{University}}",
   );
   const [bodyHtml, setBodyHtml] = useState(
     locale === "pt"
       ? `<p>Olá, <strong>{{Name}}</strong>!</p>\n\n<p>Tudo bem? Escrevo a você em nome da nossa equipe, pois temos muito interesse em apoiar as atividades desenvolvidas pelo <strong>{{Student Organization}}</strong> na <strong>{{University}}</strong>.</p>\n\n<p>Gostaria de saber se você teria 15 minutos livres na próxima semana para batermos um papo rápido e apresentar algumas ideias.</p>\n\n<p>Abraços,<br/>Equipe de Parcerias</p>`
-      : `<p>Hello, <strong>{{Name}}</strong>!</p>\n\n<p>I hope this email finds you well. I am writing to you on behalf of our team, as we are highly interested in supporting the activities developed by <strong>{{Student Organization}}</strong> at <strong>{{University}}</strong>.</p>\n\n<p>I was wondering if you would have 15 minutes to spare next week for a brief chat to discuss some collaboration ideas.</p>\n\n<p>Best regards,<br/>Partnerships Team</p>`
+      : `<p>Hello, <strong>{{Name}}</strong>!</p>\n\n<p>I hope this email finds you well. I am writing to you on behalf of our team, as we are highly interested in supporting the activities developed by <strong>{{Student Organization}}</strong> at <strong>{{University}}</strong>.</p>\n\n<p>I was wondering if you would have 15 minutes to spare next week for a brief chat to discuss some collaboration ideas.</p>\n\n<p>Best regards,<br/>Partnerships Team</p>`,
   );
 
   // Send Process States
   const [isSending, setIsSending] = useState(false);
   const [sendProgress, setSendProgress] = useState(0);
   const [currentSendingName, setCurrentSendingName] = useState("");
-  const [sendSummary, setSendSummary] = useState<{ success: number; failed: number } | null>(null);
+  const [sendSummary, setSendSummary] = useState<{
+    success: number;
+    failed: number;
+  } | null>(null);
 
   // Live Preview Navigation State
   const [previewIndex, setPreviewIndex] = useState(0);
@@ -75,11 +84,18 @@ export default function BatchSendTab({
   // Test Send State Variables
   const [testEmail, setTestEmail] = useState("");
   const [isSendingTest, setIsSendingTest] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
 
   const handleSendTest = async () => {
     if (!testEmail || !testEmail.includes("@")) {
-      alert(locale === "pt" ? "Por favor, insira um e-mail de teste válido." : "Please enter a valid test email address.");
+      alert(
+        locale === "pt"
+          ? "Por favor, insira um e-mail de teste válido."
+          : "Please enter a valid test email address.",
+      );
       return;
     }
 
@@ -87,40 +103,50 @@ export default function BatchSendTab({
     setTestResult(null);
 
     try {
-      const contactToUse = currentPreviewContact || {
-        name: locale === "pt" ? "[Nome de Teste]" : "[Test Name]",
-        university: locale === "pt" ? "[Universidade de Teste]" : "[Test University]",
-        studentOrganization: locale === "pt" ? "[Organização de Teste]" : "[Test Organization]",
-        status: "New",
-        rowIndex: 0,
-        email: testEmail,
-        notes: ""
-      } as BatchContact;
+      const contactToUse =
+        currentPreviewContact ||
+        ({
+          name: locale === "pt" ? "[Nome de Teste]" : "[Test Name]",
+          university:
+            locale === "pt" ? "[Universidade de Teste]" : "[Test University]",
+          studentOrganization:
+            locale === "pt" ? "[Organização de Teste]" : "[Test Organization]",
+          status: "New",
+          rowIndex: 0,
+          email: testEmail,
+          notes: "",
+        } as BatchContact);
 
       const personalSubject = parseTemplate(subject, contactToUse);
       let compiledBody = parseTemplate(bodyHtml, contactToUse);
 
       // Append test indicator line
       compiledBody += `<br/><hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" /><p style="font-size: 11px; color: #999;">${
-        locale === "pt" 
-          ? "Este é um e-mail de teste enviado a partir do CRM The Data Savings Act." 
+        locale === "pt"
+          ? "Este é um e-mail de teste enviado a partir do CRM The Data Savings Act."
           : "This is a test email sent from The Data Savings Act CRM."
       }</p>`;
 
-      const activeAlias = aliases.find(a => a.sendAsEmail === selectedAlias);
+      const activeAlias = aliases.find((a) => a.sendAsEmail === selectedAlias);
       const aliasName = activeAlias ? activeAlias.displayName : "";
 
-      await sendGmailMessage(testEmail, `[TEST] ${personalSubject}`, compiledBody, selectedAlias, aliasName);
+      await sendGmailMessage(
+        testEmail,
+        `[TEST] ${personalSubject}`,
+        compiledBody,
+        selectedAlias,
+        aliasName,
+      );
 
       setTestResult({
         success: true,
-        message: t("testSuccess", { email: testEmail })
+        message: t("testSuccess", { email: testEmail }),
       });
     } catch (err: any) {
       console.error("Error sending test email:", err);
       setTestResult({
         success: false,
-        message: t("testError", { error: err?.message || String(err) })
+        message: t("testError", { error: err?.message || String(err) }),
       });
     } finally {
       setIsSendingTest(false);
@@ -150,14 +176,14 @@ export default function BatchSendTab({
   // Update default subject and body if language changes
   useEffect(() => {
     setSubject(
-      locale === "pt" 
-        ? "Proposta de Parceria Universitária - {{University}}" 
-        : "University Partnership Proposal - {{University}}"
+      locale === "pt"
+        ? "Proposta de Parceria Universitária - {{University}}"
+        : "University Partnership Proposal - {{University}}",
     );
     setBodyHtml(
       locale === "pt"
         ? `<p>Olá, <strong>{{Name}}</strong>!</p>\n\n<p>Tudo bem? Escrevo a você em nome da nossa equipe, pois temos muito interesse em apoiar as atividades desenvolvidas pelo <strong>{{Student Organization}}</strong> na <strong>{{University}}</strong>.</p>\n\n<p>Gostaria de saber se você teria 15 minutos livres na próxima semana para batermos um papo rápido e apresentar algumas ideias.</p>\n\n<p>Abraços,<br/>Equipe de Parcerias</p>`
-        : `<p>Hello, <strong>{{Name}}</strong>!</p>\n\n<p>I hope this email finds you well. I am writing to you on behalf of our team, as we are highly interested in supporting the activities developed by <strong>{{Student Organization}}</strong> at <strong>{{University}}</strong>.</p>\n\n<p>I was wondering if you would have 15 minutes to spare next week for a brief chat to discuss some collaboration ideas.</p>\n\n<p>Best regards,<br/>Partnerships Team</p>`
+        : `<p>Hello, <strong>{{Name}}</strong>!</p>\n\n<p>I hope this email finds you well. I am writing to you on behalf of our team, as we are highly interested in supporting the activities developed by <strong>{{Student Organization}}</strong> at <strong>{{University}}</strong>.</p>\n\n<p>I was wondering if you would have 15 minutes to spare next week for a brief chat to discuss some collaboration ideas.</p>\n\n<p>Best regards,<br/>Partnerships Team</p>`,
     );
   }, [locale]);
 
@@ -178,19 +204,23 @@ export default function BatchSendTab({
 
     const sentCol = (c.emailSent || "").trim();
     if (sentCol.includes("@")) return sentCol;
-    
+
     const notesText = (c.notes || "").trim();
     const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
     const match = notesText.match(emailRegex);
     if (match) return match[0];
-    
+
     return "";
   };
 
   // Preview computed templates
   const currentPreviewContact = selectedContacts[previewIndex];
-  const previewSubject = currentPreviewContact ? parseTemplate(subject, currentPreviewContact) : "";
-  const previewBody = currentPreviewContact ? parseTemplate(bodyHtml, currentPreviewContact) : "";
+  const previewSubject = currentPreviewContact
+    ? parseTemplate(subject, currentPreviewContact)
+    : "";
+  const previewBody = currentPreviewContact
+    ? parseTemplate(bodyHtml, currentPreviewContact)
+    : "";
 
   // Perform Batch Send
   const handleBatchSend = async () => {
@@ -199,7 +229,10 @@ export default function BatchSendTab({
       return;
     }
 
-    const confirmText = t("sendConfirm", { count: selectedContacts.length, alias: selectedAlias });
+    const confirmText = t("sendConfirm", {
+      count: selectedContacts.length,
+      alias: selectedAlias,
+    });
     const confirmed = window.confirm(confirmText);
     if (!confirmed) return;
 
@@ -209,13 +242,12 @@ export default function BatchSendTab({
     let successCount = 0;
     let failedCount = 0;
 
-    const todayStr = new Date().toLocaleDateString(locale === "pt" ? "pt-BR" : "en-US", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
+    const todayStr = new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
     });
 
-    const activeAlias = aliases.find(a => a.sendAsEmail === selectedAlias);
+    const activeAlias = aliases.find((a) => a.sendAsEmail === selectedAlias);
     const aliasName = activeAlias ? activeAlias.displayName : "";
 
     for (let i = 0; i < selectedContacts.length; i++) {
@@ -224,7 +256,7 @@ export default function BatchSendTab({
 
       try {
         const personalSubject = parseTemplate(subject, contact);
-        
+
         // Extract email address
         const recipientEmail = extractEmailAddress(contact);
 
@@ -244,10 +276,16 @@ export default function BatchSendTab({
         compiledBody += `<div style="display:none;color:transparent;font-size:0px;line-height:0;opacity:0;">[DSA-ID:${contact.rowIndex}]</div>`;
 
         // Send email via Gmail API
-        await sendGmailMessage(recipientEmail, personalSubject, compiledBody, selectedAlias, aliasName);
+        await sendGmailMessage(
+          recipientEmail,
+          personalSubject,
+          compiledBody,
+          selectedAlias,
+          aliasName,
+        );
 
         // Update Sheet Row Status to 'waiting on them' and write DSA notes
-        const notesWithDate = contact.notes 
+        const notesWithDate = contact.notes
           ? `${contact.notes}\n[DSA CRM: Sent on ${todayStr} via ${selectedAlias}]`
           : `[DSA CRM: Sent on ${todayStr} via ${selectedAlias}]`;
 
@@ -256,6 +294,7 @@ export default function BatchSendTab({
           Notes: notesWithDate,
           "DATA DO ENVIO": todayStr,
           "email sent": todayStr,
+          "Date Sent": todayStr,
         };
         updateData["Alerta Envio"] = locale === "pt" ? "Enviado" : "Sent";
         updateData["Email Sent Alert"] = "Sent";
@@ -263,8 +302,19 @@ export default function BatchSendTab({
         updateData["Email Received Alert"] = "";
         updateData["Alerta Recebido"] = "";
         updateData["Retorno Notificação"] = "";
+        // Clear any previous "opened" alert - a new send must wait for a fresh
+        // pixel hit before it can be marked as opened again.
+        updateData["Alerta Abertura"] = "";
+        updateData["Email Opened Alert"] = "";
+        updateData["Abertura"] = "";
+        updateData["Date Opened"] = "";
 
-        await updateSheetRow(spreadsheetId, "batches", contact.rowIndex, updateData);
+        await updateSheetRow(
+          spreadsheetId,
+          "batches",
+          contact.rowIndex,
+          updateData,
+        );
 
         successCount++;
       } catch (err: any) {
@@ -278,16 +328,19 @@ export default function BatchSendTab({
     setIsSending(false);
 
     // Save details for mass send success modal
-    const timeNow = new Date().toLocaleTimeString(locale === "pt" ? "pt-BR" : "en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const timeNow = new Date().toLocaleTimeString(
+      locale === "pt" ? "pt-BR" : "en-US",
+      {
+        hour: "2-digit",
+        minute: "2-digit",
+      },
+    );
     setSentDetails({
       subject,
       dateStr: `${todayStr} às ${timeNow}`,
       totalSent: selectedContacts.length,
       successCount,
-      failedCount
+      failedCount,
     });
     setShowSuccessModal(true);
 
@@ -296,7 +349,10 @@ export default function BatchSendTab({
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full p-1" id="batch-send-tab">
+    <div
+      className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full p-1"
+      id="batch-send-tab"
+    >
       {/* Compose Panel (Left side) */}
       <div className="lg:col-span-7 bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-col gap-5 overflow-y-auto">
         <div className="flex items-center justify-between border-b border-gray-100 pb-4">
@@ -305,8 +361,14 @@ export default function BatchSendTab({
               <Mail className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-gray-800">{t("batchSend")}</h3>
-              <p className="text-xs text-gray-400">{locale === "pt" ? "Crie e dispare campanhas integradas com o Gmail e rastreador" : "Create and send customized mass email campaigns with built-in open trackers"}</p>
+              <h3 className="text-base font-bold text-gray-800">
+                {t("batchSend")}
+              </h3>
+              <p className="text-xs text-gray-400">
+                {locale === "pt"
+                  ? "Crie e dispare campanhas integradas com o Gmail e rastreador"
+                  : "Create and send customized mass email campaigns with built-in open trackers"}
+              </p>
             </div>
           </div>
 
@@ -319,7 +381,11 @@ export default function BatchSendTab({
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-bold text-gray-600 flex items-center justify-between">
             <span>{t("senderLabel")}</span>
-            {loadingAliases && <span className="text-[10px] text-indigo-600 animate-pulse">{t("loadingAliases")}</span>}
+            {loadingAliases && (
+              <span className="text-[10px] text-indigo-600 animate-pulse">
+                {t("loadingAliases")}
+              </span>
+            )}
           </label>
           <select
             value={selectedAlias}
@@ -333,7 +399,9 @@ export default function BatchSendTab({
             ) : (
               aliases.map((alias) => (
                 <option key={alias.sendAsEmail} value={alias.sendAsEmail}>
-                  {alias.displayName ? `${alias.displayName} <${alias.sendAsEmail}>` : alias.sendAsEmail}
+                  {alias.displayName
+                    ? `${alias.displayName} <${alias.sendAsEmail}>`
+                    : alias.sendAsEmail}
                 </option>
               ))
             )}
@@ -345,11 +413,13 @@ export default function BatchSendTab({
           <div className="flex flex-col">
             <h4 className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
               <MailWarning className="w-4 h-4 text-amber-500" />
-              {locale === "pt" ? "Ajuste de Entregabilidade (Anti-Spam)" : "Spam Prevention & Deliverability Settings"}
+              {locale === "pt"
+                ? "Ajuste de Entregabilidade (Anti-Spam)"
+                : "Spam Prevention & Deliverability Settings"}
             </h4>
             <p className="text-[10px] text-amber-700 leading-normal mt-0.5">
-              {locale === "pt" 
-                ? "Configure opções adicionais para maximizar as chances do e-mail chegar na Caixa de Entrada do Lead." 
+              {locale === "pt"
+                ? "Configure opções adicionais para maximizar as chances do e-mail chegar na Caixa de Entrada do Lead."
                 : "Adjust tracking and parameters to optimize inbox deliverability and prevent Gmail spam flagging."}
             </p>
           </div>
@@ -363,14 +433,19 @@ export default function BatchSendTab({
               disabled={isSending}
               className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
             />
-            <label htmlFor="disable-tracker-checkbox" className="text-xs font-bold text-gray-700 cursor-pointer select-none">
-              {locale === "pt" ? "Desativar Pixel de Rastreamento (Evita Spam)" : "Disable Tracking Pixel (Greatly Reduces Spam Risk)"}
+            <label
+              htmlFor="disable-tracker-checkbox"
+              className="text-xs font-bold text-gray-700 cursor-pointer select-none"
+            >
+              {locale === "pt"
+                ? "Desativar Pixel de Rastreamento (Evita Spam)"
+                : "Disable Tracking Pixel (Greatly Reduces Spam Risk)"}
             </label>
           </div>
-          
+
           <p className="text-[9px] text-gray-400 leading-relaxed pl-6">
-            {locale === "pt" 
-              ? "💡 Provedores de e-mail (especialmente Gmail corporativo) costumam identificar imagens remotas invisíveis de 1x1 pixel como rastreadores de spam. Desmarcar o rastreador melhora as taxas de entrega!" 
+            {locale === "pt"
+              ? "💡 Provedores de e-mail (especialmente Gmail corporativo) costumam identificar imagens remotas invisíveis de 1x1 pixel como rastreadores de spam. Desmarcar o rastreador melhora as taxas de entrega!"
               : "💡 Email providers (especially custom corporate Gmail targets) often flag remote 1x1 image trackers as tracking spam. Disabling the pixel improves direct inbox delivery rates!"}
           </p>
         </div>
@@ -382,15 +457,23 @@ export default function BatchSendTab({
             {t("varsTitle")}
           </span>
           <div className="grid grid-cols-3 gap-2 text-[10px] font-mono text-center">
-            <div className="bg-white p-2 rounded border border-indigo-100/60 text-gray-700">{"{{Name}}"}</div>
-            <div className="bg-white p-2 rounded border border-indigo-100/60 text-gray-700">{"{{University}}"}</div>
-            <div className="bg-white p-2 rounded border border-indigo-100/60 text-gray-700">{"{{Student Organization}}"}</div>
+            <div className="bg-white p-2 rounded border border-indigo-100/60 text-gray-700">
+              {"{{Name}}"}
+            </div>
+            <div className="bg-white p-2 rounded border border-indigo-100/60 text-gray-700">
+              {"{{University}}"}
+            </div>
+            <div className="bg-white p-2 rounded border border-indigo-100/60 text-gray-700">
+              {"{{Student Organization}}"}
+            </div>
           </div>
         </div>
 
         {/* Template Inputs */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-gray-600">{t("subjectLabel")}</label>
+          <label className="text-xs font-bold text-gray-600">
+            {t("subjectLabel")}
+          </label>
           <input
             type="text"
             value={subject}
@@ -402,7 +485,9 @@ export default function BatchSendTab({
         </div>
 
         <div className="flex-1 flex flex-col gap-1.5 min-h-[200px]">
-          <label className="text-xs font-bold text-gray-600">{t("bodyLabel")}</label>
+          <label className="text-xs font-bold text-gray-600">
+            {t("bodyLabel")}
+          </label>
           <textarea
             value={bodyHtml}
             onChange={(e) => setBodyHtml(e.target.value)}
@@ -423,8 +508,8 @@ export default function BatchSendTab({
               <span className="font-mono">{sendProgress}%</span>
             </div>
             <div className="w-full bg-blue-100 h-2 rounded-full overflow-hidden">
-              <div 
-                className="bg-blue-600 h-full rounded-full transition-all duration-300" 
+              <div
+                className="bg-blue-600 h-full rounded-full transition-all duration-300"
                 style={{ width: `${sendProgress}%` }}
               ></div>
             </div>
@@ -437,9 +522,16 @@ export default function BatchSendTab({
             <div className="flex items-center gap-3">
               <CheckCircle className="w-5 h-5 text-emerald-600" />
               <div>
-                <p className="font-bold text-emerald-950">{locale === "pt" ? "Mala Direta concluída!" : "Mail Merge Campaign Finished!"}</p>
+                <p className="font-bold text-emerald-950">
+                  {locale === "pt"
+                    ? "Mala Direta concluída!"
+                    : "Mail Merge Campaign Finished!"}
+                </p>
                 <p className="text-[11px] text-emerald-700 font-medium mt-0.5">
-                  {t("sendSuccess", { success: sendSummary.success, failed: sendSummary.failed })}
+                  {t("sendSuccess", {
+                    success: sendSummary.success,
+                    failed: sendSummary.failed,
+                  })}
                 </p>
               </div>
             </div>
@@ -467,7 +559,9 @@ export default function BatchSendTab({
           {selectedContacts.length > 0 && (
             <div className="flex flex-col gap-1">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                {locale === "pt" ? "Buscar e-mail cadastrado:" : "Search registered email:"}
+                {locale === "pt"
+                  ? "Buscar e-mail cadastrado:"
+                  : "Search registered email:"}
               </span>
               <select
                 onChange={(e) => {
@@ -479,15 +573,24 @@ export default function BatchSendTab({
                 disabled={isSending || isSendingTest}
                 className="w-full text-xs bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-gray-700 focus:outline-none cursor-pointer disabled:opacity-50"
               >
-                <option value="">-- {locale === "pt" ? "Selecione para preencher..." : "Select to autofill..."} --</option>
+                <option value="">
+                  --{" "}
+                  {locale === "pt"
+                    ? "Selecione para preencher..."
+                    : "Select to autofill..."}{" "}
+                  --
+                </option>
                 {selectedContacts.map((contact, idx) => {
                   const email = extractEmailAddress(contact);
                   if (!email) return null;
-                  const label = contact.name 
-                    ? `${contact.name} (${email})` 
+                  const label = contact.name
+                    ? `${contact.name} (${email})`
                     : `${contact.university || `Lead #${contact.rowIndex}`} - ${email}`;
                   return (
-                    <option key={`${contact.rowIndex}-${idx}-${email}`} value={email}>
+                    <option
+                      key={`${contact.rowIndex}-${idx}-${email}`}
+                      value={email}
+                    >
                       {label}
                     </option>
                   );
@@ -539,11 +642,13 @@ export default function BatchSendTab({
 
           {/* Test Send Feedback */}
           {testResult && (
-            <div className={`text-[11px] font-medium p-2.5 rounded-lg border ${
-              testResult.success 
-                ? "bg-emerald-50 border-emerald-100 text-emerald-800" 
-                : "bg-rose-50 border-rose-100 text-rose-800"
-            }`}>
+            <div
+              className={`text-[11px] font-medium p-2.5 rounded-lg border ${
+                testResult.success
+                  ? "bg-emerald-50 border-emerald-100 text-emerald-800"
+                  : "bg-rose-50 border-rose-100 text-rose-800"
+              }`}
+            >
               {testResult.message}
             </div>
           )}
@@ -557,7 +662,10 @@ export default function BatchSendTab({
           id="trigger-batch-send-btn"
         >
           <Send className="w-4 h-4" />
-          <span>{t("batchSend")} ({selectedContacts.length} {locale === "pt" ? "Selecionados" : "Selected"})</span>
+          <span>
+            {t("batchSend")} ({selectedContacts.length}{" "}
+            {locale === "pt" ? "Selecionados" : "Selected"})
+          </span>
         </button>
       </div>
 
@@ -566,9 +674,11 @@ export default function BatchSendTab({
         <div className="flex items-center justify-between pb-3 border-b border-gray-200">
           <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5 select-none">
             <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" />
-            {locale === "pt" ? "Visualização em Tempo Real" : "Real-time Template Preview"}
+            {locale === "pt"
+              ? "Visualização em Tempo Real"
+              : "Real-time Template Preview"}
           </span>
-          
+
           {selectedContacts.length > 1 && (
             <div className="flex items-center gap-2">
               <button
@@ -582,7 +692,11 @@ export default function BatchSendTab({
                 {previewIndex + 1} de {selectedContacts.length}
               </span>
               <button
-                onClick={() => setPreviewIndex((prev) => Math.min(selectedContacts.length - 1, prev + 1))}
+                onClick={() =>
+                  setPreviewIndex((prev) =>
+                    Math.min(selectedContacts.length - 1, prev + 1),
+                  )
+                }
                 disabled={previewIndex === selectedContacts.length - 1}
                 className="p-1.5 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 cursor-pointer"
               >
@@ -597,9 +711,13 @@ export default function BatchSendTab({
             <div className="w-12 h-12 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 mb-3">
               <User className="w-6 h-6 text-indigo-500" />
             </div>
-            <p className="text-xs font-semibold text-gray-700">{locale === "pt" ? "Nenhum contato selecionado" : "No Contacts Selected"}</p>
+            <p className="text-xs font-semibold text-gray-700">
+              {locale === "pt"
+                ? "Nenhum contato selecionado"
+                : "No Contacts Selected"}
+            </p>
             <p className="text-[11px] text-gray-400 mt-1 max-w-[200px] leading-relaxed">
-              {locale === "pt" 
+              {locale === "pt"
                 ? "Vá na tabela e selecione os contatos com caixas de seleção. Os e-mails personalizados gerados aparecerão instantaneamente aqui."
                 : "Go to the pipeline table, select one or more contacts using the checkboxes, and their personalized preview will render here in real-time."}
             </p>
@@ -609,26 +727,35 @@ export default function BatchSendTab({
             {/* Meta headers */}
             <div className="flex flex-col gap-2.5 border-b border-gray-100 pb-3 text-gray-600">
               <div className="flex items-center">
-                <span className="font-bold text-gray-400 w-12 block shrink-0 text-[10px] uppercase">De:</span>
+                <span className="font-bold text-gray-400 w-12 block shrink-0 text-[10px] uppercase">
+                  De:
+                </span>
                 <span className="font-mono text-xs bg-gray-50 text-gray-700 px-2.5 py-1 rounded border border-gray-200 truncate max-w-[190px]">
                   {selectedAlias || "suaconta@gmail.com"}
                 </span>
               </div>
               <div className="flex items-center">
-                <span className="font-bold text-gray-400 w-12 block shrink-0 text-[10px] uppercase">Para:</span>
+                <span className="font-bold text-gray-400 w-12 block shrink-0 text-[10px] uppercase">
+                  Para:
+                </span>
                 <span className="font-semibold text-indigo-600 font-mono text-xs truncate max-w-[190px]">
-                  {extractEmailAddress(currentPreviewContact) || `[E-mail na linha #${currentPreviewContact.rowIndex}]`}
+                  {extractEmailAddress(currentPreviewContact) ||
+                    `[E-mail na linha #${currentPreviewContact.rowIndex}]`}
                 </span>
               </div>
               <div className="flex items-start mt-1">
-                <span className="font-bold text-gray-400 w-12 block shrink-0 text-[10px] uppercase mt-0.5">Assunto:</span>
-                <span className="font-bold text-gray-800 text-sm leading-tight">{previewSubject || "(Sem Assunto)"}</span>
+                <span className="font-bold text-gray-400 w-12 block shrink-0 text-[10px] uppercase mt-0.5">
+                  Assunto:
+                </span>
+                <span className="font-bold text-gray-800 text-sm leading-tight">
+                  {previewSubject || "(Sem Assunto)"}
+                </span>
               </div>
             </div>
 
             {/* Rendered HTML body */}
             <div className="flex-1 overflow-y-auto min-h-[220px] p-3.5 bg-gray-50/50 border border-gray-100 rounded-lg">
-              <div 
+              <div
                 className="prose prose-sm max-w-none text-gray-800 leading-relaxed text-xs font-sans"
                 dangerouslySetInnerHTML={{ __html: previewBody }}
               />
@@ -650,20 +777,24 @@ export default function BatchSendTab({
               <RefreshCw className="w-10 h-10 animate-spin" />
             </div>
             <h3 className="text-base font-extrabold text-indigo-950 font-sans tracking-tight mt-2">
-              {locale === "pt" ? "Enviando E-mails... 🚀" : "Sending Emails... 🚀"}
+              {locale === "pt"
+                ? "Enviando E-mails... 🚀"
+                : "Sending Emails... 🚀"}
             </h3>
             <p className="text-xs text-gray-500 font-medium">
-              {locale === "pt" ? "Por favor, não feche esta janela enquanto os disparos estão sendo processados." : "Please do not close this window while the email dispatch is in progress."}
+              {locale === "pt"
+                ? "Por favor, não feche esta janela enquanto os disparos estão sendo processados."
+                : "Please do not close this window while the email dispatch is in progress."}
             </p>
-            
+
             {/* Progress Bar */}
             <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden border border-gray-200 mt-2">
-              <div 
+              <div
                 className="bg-indigo-600 h-full rounded-full transition-all duration-300"
                 style={{ width: `${sendProgress}%` }}
               ></div>
             </div>
-            
+
             <div className="flex justify-between w-full text-[10px] font-bold text-gray-400 uppercase font-mono">
               <span>{locale === "pt" ? "Progresso:" : "Progress:"}</span>
               <span>{sendProgress}%</span>
@@ -671,7 +802,8 @@ export default function BatchSendTab({
 
             {currentSendingName && (
               <p className="text-xs font-semibold text-gray-700 bg-gray-50 border border-gray-150 rounded-lg px-3 py-2 w-full truncate">
-                {locale === "pt" ? "Enviando para:" : "Sending to:"} <span className="text-indigo-600">{currentSendingName}</span>
+                {locale === "pt" ? "Enviando para:" : "Sending to:"}{" "}
+                <span className="text-indigo-600">{currentSendingName}</span>
               </p>
             )}
           </div>
@@ -682,43 +814,67 @@ export default function BatchSendTab({
       {showSuccessModal && sentDetails && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-[24px] max-w-md w-full border border-gray-200 shadow-2xl p-6 flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200">
-            
             {/* Header Icon */}
             <div className="flex flex-col items-center gap-2 select-none text-center">
               <div className="p-4 bg-emerald-50 rounded-full border border-emerald-100 shadow-sm flex items-center justify-center text-emerald-600">
                 <CheckCircle className="w-10 h-10" />
               </div>
               <h3 className="text-base font-extrabold text-emerald-950 font-sans tracking-tight mt-2">
-                {locale === "pt" ? "E-mails Enviados com Sucesso! 🎉" : "Emails Dispatched Successfully! 🎉"}
+                {locale === "pt"
+                  ? "E-mails Enviados com Sucesso! 🎉"
+                  : "Emails Dispatched Successfully! 🎉"}
               </h3>
               <p className="text-xs text-gray-500 font-medium">
-                {locale === "pt" ? "Sua campanha de mala direta foi enviada." : "Your mass email merge campaign was successfully processed."}
+                {locale === "pt"
+                  ? "Sua campanha de mala direta foi enviada."
+                  : "Your mass email merge campaign was successfully processed."}
               </p>
             </div>
 
             {/* Campaign details */}
             <div className="bg-gray-50 border border-gray-150 rounded-2xl p-4 flex flex-col gap-3 text-xs text-gray-600 font-sans">
               <div className="flex justify-between items-start border-b border-gray-200/50 pb-2">
-                <span className="font-bold text-gray-400 text-[10px] uppercase">{locale === "pt" ? "Assunto:" : "Subject:"}</span>
-                <span className="font-bold text-gray-800 text-right max-w-[240px] truncate" title={sentDetails.subject}>{sentDetails.subject}</span>
+                <span className="font-bold text-gray-400 text-[10px] uppercase">
+                  {locale === "pt" ? "Assunto:" : "Subject:"}
+                </span>
+                <span
+                  className="font-bold text-gray-800 text-right max-w-[240px] truncate"
+                  title={sentDetails.subject}
+                >
+                  {sentDetails.subject}
+                </span>
               </div>
               <div className="flex justify-between items-center border-b border-gray-200/50 pb-2">
-                <span className="font-bold text-gray-400 text-[10px] uppercase">{locale === "pt" ? "Data/Hora:" : "Sent On:"}</span>
-                <span className="font-semibold text-gray-700">{sentDetails.dateStr}</span>
+                <span className="font-bold text-gray-400 text-[10px] uppercase">
+                  {locale === "pt" ? "Data/Hora:" : "Sent On:"}
+                </span>
+                <span className="font-semibold text-gray-700">
+                  {sentDetails.dateStr}
+                </span>
               </div>
               <div className="flex justify-between items-center border-b border-gray-200/50 pb-2">
-                <span className="font-bold text-gray-400 text-[10px] uppercase">{locale === "pt" ? "Total Selecionado:" : "Total Selected:"}</span>
-                <span className="font-mono bg-gray-200/60 font-bold px-2 py-0.5 rounded text-gray-700">{sentDetails.totalSent}</span>
+                <span className="font-bold text-gray-400 text-[10px] uppercase">
+                  {locale === "pt" ? "Total Selecionado:" : "Total Selected:"}
+                </span>
+                <span className="font-mono bg-gray-200/60 font-bold px-2 py-0.5 rounded text-gray-700">
+                  {sentDetails.totalSent}
+                </span>
               </div>
               <div className="flex justify-between items-center border-b border-gray-200/50 pb-2">
-                <span className="font-bold text-gray-400 text-[10px] uppercase">{locale === "pt" ? "Disparos com Sucesso:" : "Successfully Sent:"}</span>
+                <span className="font-bold text-gray-400 text-[10px] uppercase">
+                  {locale === "pt"
+                    ? "Disparos com Sucesso:"
+                    : "Successfully Sent:"}
+                </span>
                 <span className="font-bold text-emerald-700 flex items-center gap-1 font-mono">
                   <span>●</span> {sentDetails.successCount}
                 </span>
               </div>
               {sentDetails.failedCount > 0 && (
                 <div className="flex justify-between items-center">
-                  <span className="font-bold text-gray-400 text-[10px] uppercase">{locale === "pt" ? "Falhas:" : "Failed:"}</span>
+                  <span className="font-bold text-gray-400 text-[10px] uppercase">
+                    {locale === "pt" ? "Falhas:" : "Failed:"}
+                  </span>
                   <span className="font-bold text-red-600 flex items-center gap-1 font-mono">
                     <span>●</span> {sentDetails.failedCount}
                   </span>
@@ -735,7 +891,11 @@ export default function BatchSendTab({
               }}
               className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>{locale === "pt" ? "Voltar para o Funil de Leads ➔" : "Go to Leads Pipeline ➔"}</span>
+              <span>
+                {locale === "pt"
+                  ? "Voltar para o Funil de Leads ➔"
+                  : "Go to Leads Pipeline ➔"}
+              </span>
             </button>
           </div>
         </div>

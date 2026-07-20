@@ -228,6 +228,42 @@ export async function fetchBatches(spreadsheetId: string, sheetName = "batches")
         h.toLowerCase().includes("abertura notificacao") ||
         h.toLowerCase().includes("abertura")
     ),
+    dataEnvio: headers.findIndex((h) => {
+      const norm = h.toLowerCase().trim();
+      return (
+        (norm === "data de envio" || norm === "data do envio" || norm === "data envio" || norm === "enviado em" || norm === "date sent" || norm === "ultimo envio" || norm === "último envio") &&
+        !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific")
+      );
+    }),
+    dataAbertura: headers.findIndex((h) => {
+      const norm = h.toLowerCase().trim();
+      return (
+        (norm === "data de abertura" || norm === "abertura em" || norm === "aberto em" || norm === "data abertura" || norm === "opened at" || norm === "open date" || norm === "date opened") &&
+        !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific")
+      );
+    }),
+    dataRetorno: headers.findIndex((h) => {
+      const norm = h.toLowerCase().trim();
+      return (
+        (norm === "data de retorno" || norm === "data retorno" || norm === "resposta em" || norm === "retorno em" || norm === "replied at" || norm === "reply date" || norm === "date replied") &&
+        !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific")
+      );
+    }),
+    meetingConfirmationStatus: headers.findIndex((h) => {
+      const norm = h.toLowerCase().trim();
+      return norm.includes("confirmação reunião") || norm.includes("confirmacao reuniao") || norm.includes("meeting confirmation");
+    }),
+    meetingDateTime: headers.findIndex((h) => {
+      const norm = h.toLowerCase().trim();
+      return norm.includes("meeting date") || norm.includes("data da reunião") || norm.includes("data da reuniao");
+    }),
+    role: headers.findIndex((h) => h.toLowerCase().trim() === "role" || h.toLowerCase().trim() === "cargo"),
+    statusMeetings: headers.findIndex((h) => h.toLowerCase().trim() === "status meetings" || h.toLowerCase().trim() === "status meeting"),
+    suggestedTimes: headers.findIndex((h) => h.toLowerCase().trim() === "suggested times" || h.toLowerCase().trim() === "horários sugeridos"),
+    bookedTime: headers.findIndex((h) => h.toLowerCase().trim() === "booked time" || h.toLowerCase().trim() === "horário confirmado"),
+    notesMeetings: headers.findIndex((h) => h.toLowerCase().trim() === "notes meetings" || h.toLowerCase().trim() === "notes meeting"),
+    meetingConfirmation: headers.findIndex((h) => h.toLowerCase().trim() === "meeting confirmation"),
+    meetingInvitationSentOn: headers.findIndex((h) => h.toLowerCase().trim() === "meeting invitation sent on"),
   };
 
   // Build rows (rowIndex starts at 2 for Sheets row index, since header is row 1)
@@ -235,7 +271,7 @@ export async function fetchBatches(spreadsheetId: string, sheetName = "batches")
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
     const valAt = (idx: number) => (idx !== -1 && idx < row.length ? row[idx] || "" : "");
-    
+
     contacts.push({
       rowIndex: i + 1,
       university: valAt(colIndex.university),
@@ -248,6 +284,18 @@ export async function fetchBatches(spreadsheetId: string, sheetName = "batches")
       emailSentAlert: valAt(colIndex.emailSentAlert),
       emailReceivedAlert: valAt(colIndex.emailReceivedAlert),
       emailOpenedAlert: valAt(colIndex.emailOpenedAlert),
+      dataEnvio: valAt(colIndex.dataEnvio),
+      dataAbertura: valAt(colIndex.dataAbertura),
+      dataRetorno: valAt(colIndex.dataRetorno),
+      meetingConfirmationStatus: valAt(colIndex.meetingConfirmationStatus),
+      meetingDateTime: valAt(colIndex.meetingDateTime),
+      role: valAt(colIndex.role),
+      statusMeetings: valAt(colIndex.statusMeetings),
+      suggestedTimes: valAt(colIndex.suggestedTimes),
+      bookedTime: valAt(colIndex.bookedTime),
+      notesMeetings: valAt(colIndex.notesMeetings),
+      meetingConfirmation: valAt(colIndex.meetingConfirmation),
+      meetingInvitationSentOn: valAt(colIndex.meetingInvitationSentOn),
     });
   }
 
@@ -311,6 +359,35 @@ export async function fetchMeetings(spreadsheetId: string, sheetName = "meetings
         h.toLowerCase().includes("abertura notificacao") ||
         h.toLowerCase().includes("abertura")
     ),
+    dataEnvio: headers.findIndex((h) => {
+      const norm = h.toLowerCase().trim();
+      return (
+        (norm === "data de envio" || norm === "data do envio" || norm === "data envio" || norm === "enviado em" || norm === "date sent" || norm === "ultimo envio" || norm === "último envio") &&
+        !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific")
+      );
+    }),
+    dataAbertura: headers.findIndex((h) => {
+      const norm = h.toLowerCase().trim();
+      return (
+        (norm === "data de abertura" || norm === "abertura em" || norm === "aberto em" || norm === "data abertura" || norm === "opened at" || norm === "open date" || norm === "date opened") &&
+        !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific")
+      );
+    }),
+    dataRetorno: headers.findIndex((h) => {
+      const norm = h.toLowerCase().trim();
+      return (
+        (norm === "data de retorno" || norm === "data retorno" || norm === "resposta em" || norm === "retorno em" || norm === "replied at" || norm === "reply date" || norm === "date replied") &&
+        !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific")
+      );
+    }),
+    meetingConfirmationStatus: headers.findIndex((h) => {
+      const norm = h.toLowerCase().trim();
+      return norm.includes("confirmação reunião") || norm.includes("confirmacao reuniao") || norm.includes("meeting confirmation");
+    }),
+    meetingDateTime: headers.findIndex((h) => {
+      const norm = h.toLowerCase().trim();
+      return norm.includes("meeting date") || norm.includes("data da reunião") || norm.includes("data da reuniao");
+    }),
   };
 
   const meetings: MeetingRow[] = [];
@@ -328,6 +405,11 @@ export async function fetchMeetings(spreadsheetId: string, sheetName = "meetings
       emailSentAlert: valAt(colIndex.emailSentAlert),
       emailReceivedAlert: valAt(colIndex.emailReceivedAlert),
       emailOpenedAlert: valAt(colIndex.emailOpenedAlert),
+      dataEnvio: valAt(colIndex.dataEnvio),
+      dataAbertura: valAt(colIndex.dataAbertura),
+      dataRetorno: valAt(colIndex.dataRetorno),
+      meetingConfirmationStatus: valAt(colIndex.meetingConfirmationStatus),
+      meetingDateTime: valAt(colIndex.meetingDateTime),
     });
   }
 
@@ -467,6 +549,10 @@ export async function updateSheetRow(
         "alerta recebido": ["retorno", "recebido", "received alert", "email received alert", "alerta retorno", "notif. retorno"],
         "retorno notificação": ["retorno", "recebido", "received alert", "email received alert", "alerta retorno", "notif. retorno"],
         "notif. retorno": ["retorno", "recebido", "received alert", "email received alert", "alerta retorno", "notif. retorno"],
+        "data de abertura": ["data de abertura", "abertura em", "aberto em", "data abertura"],
+        "abertura em": ["data de abertura", "abertura em", "aberto em", "data abertura"],
+        "data de retorno": ["data de retorno", "resposta em", "retorno em", "data retorno"],
+        "resposta em": ["data de retorno", "resposta em", "retorno em", "data retorno"],
       };
 
       const patterns = patternsMap[normalized];
@@ -886,7 +972,7 @@ export async function searchReplies(contactsEmails: string[]): Promise<{ email: 
  */
 
 // Fetch active calendar events and link with meeting slots
-export async function fetchCalendarMeetings(): Promise<{ email: string; startTime: string; eventTitle: string }[]> {
+export async function fetchCalendarMeetings(): Promise<{ email: string; startTime: string; eventTitle: string; responseStatus: string }[]> {
   const nowStr = new Date().toISOString();
   // Fetch events from now onwards
   const data = await googleFetch(
@@ -894,7 +980,7 @@ export async function fetchCalendarMeetings(): Promise<{ email: string; startTim
   );
 
   const events = data.items || [];
-  const calendarMeetings: { email: string; startTime: string; eventTitle: string }[] = [];
+  const calendarMeetings: { email: string; startTime: string; eventTitle: string; responseStatus: string }[] = [];
 
   for (const event of events) {
     const attendees: any[] = event.attendees || [];
@@ -913,10 +999,98 @@ export async function fetchCalendarMeetings(): Promise<{ email: string; startTim
             minute: "2-digit",
           }),
           eventTitle,
+          responseStatus: attendee.responseStatus || "needsAction",
         });
       }
     }
   }
 
   return calendarMeetings;
+}
+
+// Map a raw Google Calendar attendee responseStatus into a friendly PT/EN label to persist in Sheets
+export function mapConfirmationStatusLabel(responseStatus: string, locale: "pt" | "en" = "pt"): string {
+  const normalized = (responseStatus || "").toLowerCase().trim();
+  if (normalized === "accepted") return locale === "pt" ? "Confirmada" : "Confirmed";
+  if (normalized === "declined") return locale === "pt" ? "Recusada" : "Declined";
+  if (normalized === "tentative") return locale === "pt" ? "Talvez" : "Tentative";
+  return locale === "pt" ? "Pendente" : "Pending";
+}
+
+// Query Google Calendar Freebusy and return open slots within business hours
+export async function fetchFreeBusySlots(params: {
+  daysAhead?: number;
+  workHourStart?: number;
+  workHourEnd?: number;
+  slotMinutes?: number;
+} = {}): Promise<{ start: string; end: string }[]> {
+  const { daysAhead = 7, workHourStart = 9, workHourEnd = 18, slotMinutes = 30 } = params;
+
+  const now = new Date();
+  const timeMin = new Date(now.getTime() + 60 * 60 * 1000); // start suggesting from 1h from now
+  const timeMax = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
+
+  const data = await googleFetch("https://www.googleapis.com/calendar/v3/freeBusy", {
+    method: "POST",
+    body: JSON.stringify({
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      items: [{ id: "primary" }],
+    }),
+  });
+
+  const busy: { start: string; end: string }[] = data.calendars?.primary?.busy || [];
+  const busyRanges = busy.map((b) => ({ start: new Date(b.start), end: new Date(b.end) }));
+
+  const overlapsBusy = (slotStart: Date, slotEnd: Date) =>
+    busyRanges.some((b) => slotStart < b.end && slotEnd > b.start);
+
+  const slots: { start: string; end: string }[] = [];
+  const cursor = new Date(timeMin);
+  cursor.setMinutes(Math.ceil(cursor.getMinutes() / slotMinutes) * slotMinutes, 0, 0);
+
+  while (cursor < timeMax) {
+    const dayOfWeek = cursor.getDay();
+    const isWeekday = dayOfWeek !== 0 && dayOfWeek !== 6;
+    const hour = cursor.getHours();
+
+    if (isWeekday && hour >= workHourStart && hour < workHourEnd) {
+      const slotEnd = new Date(cursor.getTime() + slotMinutes * 60 * 1000);
+      if (!overlapsBusy(cursor, slotEnd)) {
+        slots.push({ start: cursor.toISOString(), end: slotEnd.toISOString() });
+      }
+    }
+
+    cursor.setMinutes(cursor.getMinutes() + slotMinutes);
+  }
+
+  return slots;
+}
+
+// Create a new Google Calendar event and send an invite email to the attendee
+export async function createCalendarEvent(params: {
+  summary: string;
+  description?: string;
+  attendeeEmail: string;
+  startDateTime: string; // ISO string
+  durationMinutes?: number;
+}) {
+  const { summary, description, attendeeEmail, startDateTime, durationMinutes = 30 } = params;
+
+  const start = new Date(startDateTime);
+  const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+
+  return googleFetch(
+    "https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        summary,
+        description: description || "",
+        start: { dateTime: start.toISOString() },
+        end: { dateTime: end.toISOString() },
+        attendees: [{ email: attendeeEmail }],
+      }),
+    }
+  );
 }

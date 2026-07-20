@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import { updateSheetRowAsServiceAccount } from "./src/lib/sheets-server";
 
 interface TrackEvent {
   email: string;
@@ -95,6 +96,7 @@ async function startServer() {
       const emailStr = String(email);
       const sheetIdStr = String(spreadsheetId);
       const rowStr = String(row);
+      const rowIndex = parseInt(rowStr, 10);
 
       // Avoid duplicates in the buffer
       const exists = trackedOpens.some(
@@ -107,6 +109,26 @@ async function startServer() {
           spreadsheetId: sheetIdStr,
           row: rowStr,
           openedAt: new Date().toISOString(),
+        });
+      }
+
+      // Best-effort direct write to the sheet via Service Account, so opens are
+      // recorded even if nobody has the CRM open in a browser. This never blocks
+      // or fails the pixel response - the in-memory buffer above remains as a
+      // fallback/redundant path consumed by the frontend's polling sync.
+      if (!isNaN(rowIndex)) {
+        const todayStr = new Date().toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+
+        updateSheetRowAsServiceAccount(sheetIdStr, "batches", rowIndex, {
+          "Alerta Abertura": "Aberto",
+          "Email Opened Alert": "Opened",
+          "Abertura": "Aberto",
+          "Date Opened": todayStr,
+        }).catch((err) => {
+          console.error("[api/track] Falha ao gravar abertura diretamente na planilha:", err);
         });
       }
     }

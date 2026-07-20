@@ -1,19 +1,24 @@
 import React, { useState, useEffect } from "react";
-import { 
-  RefreshCw, 
-  Sparkles, 
-  MailWarning, 
-  Clock, 
-  Send, 
-  Check, 
+import {
+  RefreshCw,
+  Sparkles,
+  MailWarning,
+  Clock,
+  Send,
+  Check,
   CheckCircle,
   AlertOctagon,
   Eye,
   ArrowRight,
-  Info
+  Info,
 } from "lucide-react";
 import { BatchContact, MeetingRow } from "../types";
-import { searchReplies, searchBounces, updateSheetRow, sendGmailMessage } from "../lib/google-api";
+import {
+  searchReplies,
+  searchBounces,
+  updateSheetRow,
+  sendGmailMessage,
+} from "../lib/google-api";
 import { motion } from "motion/react";
 import { useI18n } from "../lib/i18n";
 
@@ -38,15 +43,23 @@ export default function AutomationTab({
 
   // Bounce Sync States
   const [isSyncingBounces, setIsSyncingBounces] = useState(false);
-  const [detectedBounces, setDetectedBounces] = useState<{ recipient: string; subject: string; date: string }[]>([]);
+  const [detectedBounces, setDetectedBounces] = useState<
+    { recipient: string; subject: string; date: string }[]
+  >([]);
 
   // Tracked Opens States
   const [isSyncingOpens, setIsSyncingOpens] = useState(false);
-  const [trackedOpens, setTrackedOpens] = useState<{ email: string; row: string; openedAt: string }[]>([]);
+  const [trackedOpens, setTrackedOpens] = useState<
+    { email: string; row: string; openedAt: string }[]
+  >([]);
 
   // Follow-up states
-  const [followUpCandidates, setFollowUpCandidates] = useState<BatchContact[]>([]);
-  const [isSendingFollowUp, setIsSendingFollowUp] = useState<number | null>(null); // contact row index
+  const [followUpCandidates, setFollowUpCandidates] = useState<BatchContact[]>(
+    [],
+  );
+  const [isSendingFollowUp, setIsSendingFollowUp] = useState<number | null>(
+    null,
+  ); // contact row index
 
   // Extract Email Helper
   const extractEmail = (c: BatchContact) => {
@@ -65,18 +78,21 @@ export default function AutomationTab({
     const today = new Date();
     const candidates = batchesData.filter((contact) => {
       const status = (contact.status || "").toLowerCase().trim();
-      const isWaiting = status === "waiting on them" || status === "" || !status;
-      
+      const isWaiting =
+        status === "waiting on them" || status === "" || !status;
+
       if (!isWaiting) return false;
 
       // Extract date from Notes (e.g., "Enviado em DD/MM/YYYY" or "Sent on DD/MM/YYYY")
-      const match = (contact.notes || "").match(/(?:Enviado em|Sent on) (\d{2})\/(\d{2})\/(\d{4})/);
+      const match = (contact.notes || "").match(
+        /(?:Enviado em|Sent on) (\d{2})\/(\d{2})\/(\d{4})/,
+      );
       if (!match) return false;
 
       const day = parseInt(match[1]);
       const month = parseInt(match[2]) - 1;
       const year = parseInt(match[3]);
-      
+
       const sentDate = new Date(year, month, day);
       const diffTime = Math.abs(today.getTime() - sentDate.getTime());
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -96,7 +112,12 @@ export default function AutomationTab({
         setTrackedOpens(data);
       }
     } catch (err) {
-      console.error(locale === "pt" ? "Erro ao carregar aberturas do pixel:" : "Error loading pixel opens:", err);
+      console.error(
+        locale === "pt"
+          ? "Erro ao carregar aberturas do pixel:"
+          : "Error loading pixel opens:",
+        err,
+      );
     }
   };
 
@@ -113,7 +134,7 @@ export default function AutomationTab({
     const confirmed = window.confirm(
       locale === "pt"
         ? `Deseja atualizar o status de ${trackedOpens.length} contatos abertos para "Opened" no Google Sheets?`
-        : `Do you want to update the status of ${trackedOpens.length} opened contacts to "Opened" in Google Sheets?`
+        : `Do you want to update the status of ${trackedOpens.length} opened contacts to "Opened" in Google Sheets?`,
     );
     if (!confirmed) return;
 
@@ -123,14 +144,13 @@ export default function AutomationTab({
       for (const open of trackedOpens) {
         const rowIndex = parseInt(open.row);
         const contact = batchesData.find((c) => c.rowIndex === rowIndex);
-        
+
         if (contact) {
-          const todayStr = new Date().toLocaleDateString(locale === "pt" ? "pt-BR" : "en-US", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
+          const todayStr = new Date().toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
           });
-          const notesWithOpen = contact.notes 
+          const notesWithOpen = contact.notes
             ? `${contact.notes}\n[${locale === "pt" ? "Automação: E-mail aberto detectado em" : "Automation: Email open detected on"} ${todayStr}]`
             : `[${locale === "pt" ? "Automação: E-mail aberto detectado em" : "Automation: Email open detected on"} ${todayStr}]`;
 
@@ -152,13 +172,22 @@ export default function AutomationTab({
       alert(
         locale === "pt"
           ? `Sucesso! Status de ${updatedCount} contatos atualizado para "Opened" na planilha.`
-          : `Success! Status of ${updatedCount} contacts updated to "Opened" in the spreadsheet.`
+          : `Success! Status of ${updatedCount} contacts updated to "Opened" in the spreadsheet.`,
       );
       loadTrackedOpens();
       onRefresh();
     } catch (err) {
-      console.error(locale === "pt" ? "Erro ao sincronizar aberturas:" : "Error syncing opens:", err);
-      alert(locale === "pt" ? "Erro ao sincronizar e-mails abertos." : "Error syncing opened emails.");
+      console.error(
+        locale === "pt"
+          ? "Erro ao sincronizar aberturas:"
+          : "Error syncing opens:",
+        err,
+      );
+      alert(
+        locale === "pt"
+          ? "Erro ao sincronizar e-mails abertos."
+          : "Error syncing opened emails.",
+      );
     } finally {
       setIsSyncingOpens(false);
     }
@@ -170,15 +199,17 @@ export default function AutomationTab({
     setRepliesResult(null);
 
     try {
-      const batchEmails = batchesData.map(c => extractEmail(c)).filter(Boolean);
-      const meetingEmails = meetingsData.map(m => m.email).filter(Boolean);
+      const batchEmails = batchesData
+        .map((c) => extractEmail(c))
+        .filter(Boolean);
+      const meetingEmails = meetingsData.map((m) => m.email).filter(Boolean);
       const allEmails = Array.from(new Set([...batchEmails, ...meetingEmails]));
 
       if (allEmails.length === 0) {
         alert(
           locale === "pt"
             ? "Nenhum endereço de e-mail foi encontrado nas planilhas para buscar respostas."
-            : "No email address was found in the spreadsheets to search for replies."
+            : "No email address was found in the spreadsheets to search for replies.",
         );
         setIsSyncingReplies(false);
         return;
@@ -187,10 +218,9 @@ export default function AutomationTab({
       const repliedDetections = await searchReplies(allEmails);
 
       let sheetsUpdated = 0;
-      const todayStr = new Date().toLocaleDateString(locale === "pt" ? "pt-BR" : "en-US", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
+      const todayStr = new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
       });
 
       for (const reply of repliedDetections) {
@@ -198,13 +228,17 @@ export default function AutomationTab({
         const rowIndex = reply.rowIndex;
 
         // Try to match batch contact by rowIndex first, then by email
-        let batchContact = rowIndex ? batchesData.find(c => c.rowIndex === rowIndex) : null;
+        let batchContact = rowIndex
+          ? batchesData.find((c) => c.rowIndex === rowIndex)
+          : null;
         if (!batchContact) {
-          batchContact = batchesData.find(c => extractEmail(c).toLowerCase() === email.toLowerCase());
+          batchContact = batchesData.find(
+            (c) => extractEmail(c).toLowerCase() === email.toLowerCase(),
+          );
         }
 
         if (batchContact && batchContact.status !== "Replied - waiting") {
-          const notesWithReply = batchContact.notes 
+          const notesWithReply = batchContact.notes
             ? `${batchContact.notes}\n[${locale === "pt" ? "Automação: Resposta recebida detectada em" : "Automation: Reply received detected on"} ${todayStr}]`
             : `[${locale === "pt" ? "Automação: Resposta recebida detectada em" : "Automation: Reply received detected on"} ${todayStr}]`;
 
@@ -212,18 +246,29 @@ export default function AutomationTab({
             Status: "Replied - waiting",
             Notes: notesWithReply,
           };
-          updateData["Alerta Retorno"] = locale === "pt" ? "Novo Retorno!" : "New Reply!";
-          updateData["Email Received Alert"] = locale === "pt" ? "Novo Retorno!" : "New Reply!";
-          updateData["Alerta Recebido"] = locale === "pt" ? "Novo Retorno!" : "New Reply!";
-          updateData["Retorno Notificação"] = locale === "pt" ? "Novo Retorno!" : "New Reply!";
+          updateData["Alerta Retorno"] =
+            locale === "pt" ? "Novo Retorno!" : "New Reply!";
+          updateData["Email Received Alert"] =
+            locale === "pt" ? "Novo Retorno!" : "New Reply!";
+          updateData["Alerta Recebido"] =
+            locale === "pt" ? "Novo Retorno!" : "New Reply!";
+          updateData["Retorno Notificação"] =
+            locale === "pt" ? "Novo Retorno!" : "New Reply!";
 
-          await updateSheetRow(spreadsheetId, "batches", batchContact.rowIndex, updateData);
+          await updateSheetRow(
+            spreadsheetId,
+            "batches",
+            batchContact.rowIndex,
+            updateData,
+          );
           sheetsUpdated++;
         }
 
-        const meetingRow = meetingsData.find(m => m.email.toLowerCase() === email.toLowerCase());
+        const meetingRow = meetingsData.find(
+          (m) => m.email.toLowerCase() === email.toLowerCase(),
+        );
         if (meetingRow && meetingRow.status !== "Replied - waiting") {
-          const notesWithReply = meetingRow.notes 
+          const notesWithReply = meetingRow.notes
             ? `${meetingRow.notes}\n[${locale === "pt" ? "Automação: Resposta recebida detectada em" : "Automation: Reply received detected on"} ${todayStr}]`
             : `[${locale === "pt" ? "Automação: Resposta recebida detectada em" : "Automation: Reply received detected on"} ${todayStr}]`;
 
@@ -231,26 +276,40 @@ export default function AutomationTab({
             status: "Replied - waiting",
             Notes: notesWithReply,
           };
-          updateData["Alerta Retorno"] = locale === "pt" ? "Novo Retorno!" : "New Reply!";
-          updateData["Email Received Alert"] = locale === "pt" ? "Novo Retorno!" : "New Reply!";
-          updateData["Alerta Recebido"] = locale === "pt" ? "Novo Retorno!" : "New Reply!";
-          updateData["Retorno Notificação"] = locale === "pt" ? "Novo Retorno!" : "New Reply!";
+          updateData["Alerta Retorno"] =
+            locale === "pt" ? "Novo Retorno!" : "New Reply!";
+          updateData["Email Received Alert"] =
+            locale === "pt" ? "Novo Retorno!" : "New Reply!";
+          updateData["Alerta Recebido"] =
+            locale === "pt" ? "Novo Retorno!" : "New Reply!";
+          updateData["Retorno Notificação"] =
+            locale === "pt" ? "Novo Retorno!" : "New Reply!";
 
-          await updateSheetRow(spreadsheetId, "meetings", meetingRow.rowIndex, updateData);
+          await updateSheetRow(
+            spreadsheetId,
+            "meetings",
+            meetingRow.rowIndex,
+            updateData,
+          );
           sheetsUpdated++;
         }
       }
 
-      setRepliesResult(repliedDetections.map(r => r.email));
+      setRepliesResult(repliedDetections.map((r) => r.email));
       if (sheetsUpdated > 0) {
         onRefresh();
       }
     } catch (err) {
-      console.error(locale === "pt" ? "Erro ao rodar automação de respostas:" : "Error running replies automation:", err);
+      console.error(
+        locale === "pt"
+          ? "Erro ao rodar automação de respostas:"
+          : "Error running replies automation:",
+        err,
+      );
       alert(
         locale === "pt"
           ? "Houve um erro ao buscar e-mails de resposta no Gmail."
-          : "There was an error searching for reply emails in Gmail."
+          : "There was an error searching for reply emails in Gmail.",
       );
     } finally {
       setIsSyncingReplies(false);
@@ -264,25 +323,29 @@ export default function AutomationTab({
 
     try {
       const bounces = await searchBounces();
-      const matchedBounces: { recipient: string; subject: string; date: string }[] = [];
+      const matchedBounces: {
+        recipient: string;
+        subject: string;
+        date: string;
+      }[] = [];
 
       let bounceUpdates = 0;
-      const todayStr = new Date().toLocaleDateString(locale === "pt" ? "pt-BR" : "en-US", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
+      const todayStr = new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
       });
 
       for (const bounce of bounces) {
         const contact = batchesData.find(
-          (c) => extractEmail(c).toLowerCase() === bounce.recipient.toLowerCase()
+          (c) =>
+            extractEmail(c).toLowerCase() === bounce.recipient.toLowerCase(),
         );
 
         if (contact) {
           matchedBounces.push(bounce);
 
           if (contact.status !== "Email bounced") {
-            const notesWithBounce = contact.notes 
+            const notesWithBounce = contact.notes
               ? `${contact.notes}\n[${locale === "pt" ? `Automação: Falha de entrega (Bounce) detectada em ${todayStr}. Assunto: "${bounce.subject}"` : `Automation: Delivery failure (Bounce) detected on ${todayStr}. Subject: "${bounce.subject}"`}]`
               : `[${locale === "pt" ? `Automação: Falha de entrega (Bounce) detectada em ${todayStr}` : `Automation: Delivery failure (Bounce) detected on ${todayStr}`}]`;
 
@@ -300,11 +363,16 @@ export default function AutomationTab({
         onRefresh();
       }
     } catch (err) {
-      console.error(locale === "pt" ? "Erro ao rodar automação de bounces:" : "Error running bounces automation:", err);
+      console.error(
+        locale === "pt"
+          ? "Erro ao rodar automação de bounces:"
+          : "Error running bounces automation:",
+        err,
+      );
       alert(
         locale === "pt"
           ? "Houve um erro ao buscar erros de entrega (bounces) no Gmail."
-          : "There was an error searching for delivery failures (bounces) in Gmail."
+          : "There was an error searching for delivery failures (bounces) in Gmail.",
       );
     } finally {
       setIsSyncingBounces(false);
@@ -318,7 +386,7 @@ export default function AutomationTab({
       alert(
         locale === "pt"
           ? "E-mail do contato inválido ou ausente."
-          : "Invalid or missing contact email."
+          : "Invalid or missing contact email.",
       );
       return;
     }
@@ -326,30 +394,31 @@ export default function AutomationTab({
     const confirmed = window.confirm(
       locale === "pt"
         ? `Deseja disparar um e-mail de Follow-up (cobrança amigável) para ${contact.name} (${contact.university})?`
-        : `Do you want to send a Follow-up email (friendly nudge) to ${contact.name} (${contact.university})?`
+        : `Do you want to send a Follow-up email (friendly nudge) to ${contact.name} (${contact.university})?`,
     );
     if (!confirmed) return;
 
     setIsSendingFollowUp(contact.rowIndex);
     try {
-      const todayStr = new Date().toLocaleDateString(locale === "pt" ? "pt-BR" : "en-US", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
+      const todayStr = new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
       });
 
-      const followUpSubject = locale === "pt"
-        ? `Acompanhamento: Parceria com o ${contact.studentOrganization}`
-        : `Follow-up: Partnership with ${contact.studentOrganization}`;
-      const followUpBody = locale === "pt"
-        ? `
+      const followUpSubject =
+        locale === "pt"
+          ? `Acompanhamento: Parceria com o ${contact.studentOrganization}`
+          : `Follow-up: Partnership with ${contact.studentOrganization}`;
+      const followUpBody =
+        locale === "pt"
+          ? `
           <p>Olá, <strong>${contact.name}</strong>!</p>
           <p>Tudo bem?</p>
           <p>Gostaria de dar um rápido retorno sobre a proposta que te enviei há alguns dias para parceria com o <strong>${contact.studentOrganization}</strong> na <strong>${contact.university}</strong>.</p>
           <p>Caso tenha 10 minutos livres para batermos um papo curto na próxima semana, seria excelente.</p>
           <p>Abraços,<br/>Equipe de Parcerias</p>
         `
-        : `
+          : `
           <p>Hello, <strong>${contact.name}</strong>!</p>
           <p>Hope you are doing well.</p>
           <p>I wanted to follow up quickly on the partnership proposal I sent you a few days ago regarding <strong>${contact.studentOrganization}</strong> at <strong>${contact.university}</strong>.</p>
@@ -357,10 +426,12 @@ export default function AutomationTab({
           <p>Best regards,<br/>Partnership Team</p>
         `;
 
-      const followUpBodyWithTag = followUpBody + `<br/><div style="display:none;color:transparent;font-size:0px;line-height:0;opacity:0;">[DSA-ID:${contact.rowIndex}]</div>`;
+      const followUpBodyWithTag =
+        followUpBody +
+        `<br/><div style="display:none;color:transparent;font-size:0px;line-height:0;opacity:0;">[DSA-ID:${contact.rowIndex}]</div>`;
       await sendGmailMessage(recipient, followUpSubject, followUpBodyWithTag);
 
-      const updatedNotes = contact.notes 
+      const updatedNotes = contact.notes
         ? `${contact.notes}\n[${locale === "pt" ? "Follow-up Automático Enviado em" : "Automatic Follow-up Sent on"} ${todayStr}]`
         : `[${locale === "pt" ? "Follow-up Automático Enviado em" : "Automatic Follow-up Sent on"} ${todayStr}]`;
 
@@ -375,20 +446,30 @@ export default function AutomationTab({
       updateData["Alerta Recebido"] = "";
       updateData["Retorno Notificação"] = "";
 
-      await updateSheetRow(spreadsheetId, "batches", contact.rowIndex, updateData);
+      await updateSheetRow(
+        spreadsheetId,
+        "batches",
+        contact.rowIndex,
+        updateData,
+      );
 
       alert(
         locale === "pt"
           ? "E-mail de Follow-up enviado com sucesso!"
-          : "Follow-up email sent successfully!"
+          : "Follow-up email sent successfully!",
       );
       onRefresh();
     } catch (err) {
-      console.error(locale === "pt" ? "Erro ao enviar follow-up:" : "Error sending follow-up:", err);
+      console.error(
+        locale === "pt"
+          ? "Erro ao enviar follow-up:"
+          : "Error sending follow-up:",
+        err,
+      );
       alert(
         locale === "pt"
           ? "Houve um erro ao processar o envio do follow-up."
-          : "There was an error processing the follow-up email."
+          : "There was an error processing the follow-up email.",
       );
     } finally {
       setIsSendingFollowUp(null);
@@ -396,15 +477,18 @@ export default function AutomationTab({
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full p-1" id="automation-tab">
-      
+    <div
+      className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full p-1"
+      id="automation-tab"
+    >
       {/* Control Panel (Left column) */}
       <div className="lg:col-span-4 flex flex-col gap-6">
-        
         {/* Sync Card */}
         <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-col gap-4">
           <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block">
-            {locale === "pt" ? "Painel Central de Automação" : "Automation Control Panel"}
+            {locale === "pt"
+              ? "Painel Central de Automação"
+              : "Automation Control Panel"}
           </span>
           <h3 className="text-base font-bold text-gray-800 flex items-center gap-2 -mt-1">
             <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" />
@@ -425,8 +509,14 @@ export default function AutomationTab({
               className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
               id="sync-replies-btn"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingReplies ? "animate-spin" : ""}`} />
-              <span>{locale === "pt" ? "Buscar Novas Respostas" : "Search New Replies"}</span>
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${isSyncingReplies ? "animate-spin" : ""}`}
+              />
+              <span>
+                {locale === "pt"
+                  ? "Buscar Novas Respostas"
+                  : "Search New Replies"}
+              </span>
             </button>
 
             {/* Sync Bounces */}
@@ -436,8 +526,14 @@ export default function AutomationTab({
               className="w-full inline-flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold py-3 px-4 rounded-xl text-xs transition-colors border border-gray-200 cursor-pointer disabled:opacity-50"
               id="sync-bounces-btn"
             >
-              <MailWarning className={`w-3.5 h-3.5 ${isSyncingBounces ? "animate-spin" : ""}`} />
-              <span>{locale === "pt" ? "Verificar Bounces/Erros" : "Check Bounces/Errors"}</span>
+              <MailWarning
+                className={`w-3.5 h-3.5 ${isSyncingBounces ? "animate-spin" : ""}`}
+              />
+              <span>
+                {locale === "pt"
+                  ? "Verificar Bounces/Erros"
+                  : "Check Bounces/Errors"}
+              </span>
             </button>
           </div>
 
@@ -460,7 +556,9 @@ export default function AutomationTab({
             <div className="bg-red-50/50 border border-red-200 rounded-xl p-4 text-xs text-red-900">
               <p className="font-bold flex items-center gap-1.5">
                 <AlertOctagon className="w-4 h-4 text-red-600" />
-                {locale === "pt" ? "Falhas Identificadas" : "Delivery Failures Detected"}
+                {locale === "pt"
+                  ? "Falhas Identificadas"
+                  : "Delivery Failures Detected"}
               </p>
               <p className="mt-1.5 text-red-800 leading-relaxed">
                 {locale === "pt"
@@ -475,7 +573,9 @@ export default function AutomationTab({
         <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-col gap-4">
           <h4 className="text-xs font-bold uppercase tracking-wider text-gray-700 flex items-center gap-2">
             <Eye className="w-4.5 h-4.5 text-indigo-500" />
-            {locale === "pt" ? `Visualizações do Pixel (${trackedOpens.length})` : `Pixel Views (${trackedOpens.length})`}
+            {locale === "pt"
+              ? `Visualizações do Pixel (${trackedOpens.length})`
+              : `Pixel Views (${trackedOpens.length})`}
           </h4>
           <p className="text-xs text-gray-400 leading-relaxed">
             {locale === "pt"
@@ -487,9 +587,16 @@ export default function AutomationTab({
             <div className="flex flex-col gap-2.5">
               <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 text-[10px] text-gray-700 max-h-[120px] overflow-y-auto font-mono flex flex-col gap-1.5 shadow-inner">
                 {trackedOpens.map((open, idx) => (
-                  <div key={idx} className="flex justify-between border-b border-gray-100 pb-1 last:border-0 truncate">
-                    <span className="font-bold text-gray-800">{open.email}</span>
-                    <span className="text-gray-400">{locale === "pt" ? "Linha" : "Row"} #{open.row}</span>
+                  <div
+                    key={idx}
+                    className="flex justify-between border-b border-gray-100 pb-1 last:border-0 truncate"
+                  >
+                    <span className="font-bold text-gray-800">
+                      {open.email}
+                    </span>
+                    <span className="text-gray-400">
+                      {locale === "pt" ? "Linha" : "Row"} #{open.row}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -505,12 +612,18 @@ export default function AutomationTab({
                 ) : (
                   <CheckCircle className="w-4 h-4 text-indigo-600" />
                 )}
-                <span>{locale === "pt" ? `Gravar ${trackedOpens.length} Visualizações` : `Save ${trackedOpens.length} Views`}</span>
+                <span>
+                  {locale === "pt"
+                    ? `Gravar ${trackedOpens.length} Visualizações`
+                    : `Save ${trackedOpens.length} Views`}
+                </span>
               </button>
             </div>
           ) : (
             <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 text-center text-xs text-gray-400 font-medium">
-              {locale === "pt" ? "Nenhuma nova abertura pendente de gravação." : "No new opens pending registration."}
+              {locale === "pt"
+                ? "Nenhuma nova abertura pendente de gravação."
+                : "No new opens pending registration."}
             </div>
           )}
         </div>
@@ -524,13 +637,22 @@ export default function AutomationTab({
               <Clock className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-gray-800">{locale === "pt" ? "Fila Inteligente de Follow-up" : "Smart Follow-up Queue"}</h3>
-              <p className="text-xs text-gray-400">{locale === "pt" ? "Contatos em silêncio há mais de 3 dias no pipeline" : "Contacts silent for over 3 days in the pipeline"}</p>
+              <h3 className="text-base font-bold text-gray-800">
+                {locale === "pt"
+                  ? "Fila Inteligente de Follow-up"
+                  : "Smart Follow-up Queue"}
+              </h3>
+              <p className="text-xs text-gray-400">
+                {locale === "pt"
+                  ? "Contatos em silêncio há mais de 3 dias no pipeline"
+                  : "Contacts silent for over 3 days in the pipeline"}
+              </p>
             </div>
           </div>
 
           <div className="text-xs font-bold bg-[#c2e7ff] text-[#001d35] px-3.5 py-1.5 rounded-full shadow-sm">
-            {followUpCandidates.length} {locale === "pt" ? "pendências" : "pending"}
+            {followUpCandidates.length}{" "}
+            {locale === "pt" ? "pendências" : "pending"}
           </div>
         </div>
 
@@ -539,7 +661,9 @@ export default function AutomationTab({
             <div className="w-12 h-12 rounded-xl bg-white text-emerald-600 flex items-center justify-center mb-3 shadow-sm border border-gray-100">
               <Check className="w-6 h-6 stroke-[3px]" />
             </div>
-            <p className="text-sm font-bold text-gray-800">{locale === "pt" ? "Tudo em dia!" : "All caught up!"}</p>
+            <p className="text-sm font-bold text-gray-800">
+              {locale === "pt" ? "Tudo em dia!" : "All caught up!"}
+            </p>
             <p className="text-xs text-gray-400 mt-1 max-w-[260px] leading-relaxed">
               {locale === "pt"
                 ? "Excelente! Nenhum lead do CRM está há mais de 3 dias aguardando follow-up neste pipeline de prospecção."
@@ -551,19 +675,27 @@ export default function AutomationTab({
             {followUpCandidates.map((contact) => {
               const email = extractEmail(contact);
               return (
-                <div 
+                <div
                   key={contact.rowIndex}
                   className="bg-gray-50 hover:bg-gray-100/75 border border-gray-150 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs transition-colors"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-gray-800 text-sm truncate">{contact.name}</span>
+                      <span className="font-bold text-gray-800 text-sm truncate">
+                        {contact.name}
+                      </span>
                       <span className="bg-indigo-50 text-indigo-700 border border-indigo-100 font-bold text-[9px] px-2 py-0.5 rounded">
                         {locale === "pt" ? "Linha" : "Row"} #{contact.rowIndex}
                       </span>
                     </div>
-                    <p className="text-gray-500 font-semibold text-xs mt-1">{contact.university} — {contact.studentOrganization}</p>
-                    {email && <p className="text-gray-400 font-mono text-[10px] mt-1">{email}</p>}
+                    <p className="text-gray-500 font-semibold text-xs mt-1">
+                      {contact.university} — {contact.studentOrganization}
+                    </p>
+                    {email && (
+                      <p className="text-gray-400 font-mono text-[10px] mt-1">
+                        {email}
+                      </p>
+                    )}
                   </div>
 
                   <button
@@ -577,7 +709,11 @@ export default function AutomationTab({
                     ) : (
                       <Send className="w-3.5 h-3.5" />
                     )}
-                    <span>{locale === "pt" ? "Disparar Follow-up" : "Send Follow-up"}</span>
+                    <span>
+                      {locale === "pt"
+                        ? "Disparar Follow-up"
+                        : "Send Follow-up"}
+                    </span>
                   </button>
                 </div>
               );
