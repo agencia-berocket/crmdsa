@@ -838,19 +838,46 @@ function getMessageBody(payload: any): string {
 // Search Gmail for Replies from contacts (returns array of objects with email and optional matched rowIndex)
 export async function searchReplies(contactsEmails: string[]): Promise<{ email: string; rowIndex?: number }[]> {
   if (contactsEmails.length === 0) return [];
-  
-  // Search unread or inbox messages containing our custom hidden tag "DSA-ID" or from our contact list, excluding ourselves
-  const batchEmailsQuery = contactsEmails.slice(0, 30).map(email => `from:${email}`).join(" OR ");
-  const query = `(DSA-ID${batchEmailsQuery ? " OR " + batchEmailsQuery : ""}) -from:me`;
-  
-  const searchResult = await googleFetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50`
-  );
 
-  const messages = searchResult.messages || [];
+  // Gmail search queries have a practical length limit, so the contact list is
+  // split into chunks of 25 and searched one chunk at a time — a single query
+  // capped at the first 30 contacts would silently never detect replies from
+  // any lead added to the sheet beyond row ~30. The legacy "DSA-ID" keyword
+  // (hidden body tag used before the correlation id moved to the X-DSA-ID
+  // header) rides along on the first chunk only, to still catch replies that
+  // quote an old-format email.
+  const CHUNK_SIZE = 25;
+  const chunks: string[][] = [];
+  for (let i = 0; i < contactsEmails.length; i += CHUNK_SIZE) {
+    chunks.push(contactsEmails.slice(i, i + CHUNK_SIZE));
+  }
+
   const resultsMap = new Map<string, { email: string; rowIndex?: number }>();
+  const processedMessageIds = new Set<string>();
+  const allMessages: { id: string }[] = [];
 
-  for (const msg of messages) {
+  for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
+    const batchEmailsQuery = chunks[chunkIdx].map(email => `from:${email}`).join(" OR ");
+    const query = chunkIdx === 0
+      ? `(DSA-ID${batchEmailsQuery ? " OR " + batchEmailsQuery : ""}) -from:me`
+      : `(${batchEmailsQuery}) -from:me`;
+
+    try {
+      const searchResult = await googleFetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50`
+      );
+      for (const msg of searchResult.messages || []) {
+        if (!processedMessageIds.has(msg.id)) {
+          processedMessageIds.add(msg.id);
+          allMessages.push(msg);
+        }
+      }
+    } catch (error) {
+      console.warn(`Reply search failed for contact chunk ${chunkIdx + 1}/${chunks.length}:`, error);
+    }
+  }
+
+  for (const msg of allMessages) {
     try {
       const detail = await googleFetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`);
       const headers: any[] = detail.payload.headers || [];

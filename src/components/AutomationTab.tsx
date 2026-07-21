@@ -19,6 +19,7 @@ import {
   updateSheetRow,
   sendGmailMessage,
 } from "../lib/google-api";
+import { getPublicBaseUrl } from "../lib/app-config";
 import { motion } from "motion/react";
 import { useI18n } from "../lib/i18n";
 
@@ -406,7 +407,7 @@ export default function AutomationTab({
           <p>Best regards,<br/>Partnership Team</p>
         `;
 
-      const unsubscribeUrl = `${window.location.origin}/api/unsubscribe?email=${encodeURIComponent(recipient)}&spreadsheetId=${spreadsheetId}&row=${contact.rowIndex}`;
+      const unsubscribeUrl = `${await getPublicBaseUrl()}/api/unsubscribe?email=${encodeURIComponent(recipient)}&spreadsheetId=${spreadsheetId}&row=${contact.rowIndex}`;
       const followUpBodyWithFooter =
         followUpBody +
         `<br/><hr style="border:0;border-top:1px solid #eee;margin:20px 0;" /><p style="font-size:11px;color:#999;">${

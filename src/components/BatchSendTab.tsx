@@ -19,6 +19,7 @@ import {
   fetchGmailAliases,
   updateSheetRow,
 } from "../lib/google-api";
+import { getPublicBaseUrl } from "../lib/app-config";
 import { useI18n } from "../lib/i18n";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -250,6 +251,11 @@ export default function BatchSendTab({
     const activeAlias = aliases.find((a) => a.sendAsEmail === selectedAlias);
     const aliasName = activeAlias ? activeAlias.displayName : "";
 
+    // Public domain of the deployed app — pixel/unsubscribe links must point
+    // here (not window.location.origin) or sends from a dev session embed
+    // localhost URLs the lead can never reach.
+    const publicBaseUrl = await getPublicBaseUrl();
+
     for (let i = 0; i < selectedContacts.length; i++) {
       const contact = selectedContacts[i];
       setCurrentSendingName(contact.name || contact.university);
@@ -266,14 +272,14 @@ export default function BatchSendTab({
 
         let compiledBody = parseTemplate(bodyHtml, contact);
 
-        const unsubscribeUrl = `${window.location.origin}/api/unsubscribe?email=${encodeURIComponent(recipientEmail)}&spreadsheetId=${spreadsheetId}&row=${contact.rowIndex}`;
+        const unsubscribeUrl = `${publicBaseUrl}/api/unsubscribe?email=${encodeURIComponent(recipientEmail)}&spreadsheetId=${spreadsheetId}&row=${contact.rowIndex}`;
 
         if (!disableTracker) {
           // Small, genuinely visible open indicator (loads /api/track from our
           // server). Kept as a real, rendered image rather than a display:none
           // 1x1 - hidden remote images are the pattern spam filters key on, a
           // legitimately-sized visible image is not.
-          const trackingPixelUrl = `${window.location.origin}/api/track?email=${encodeURIComponent(recipientEmail)}&spreadsheetId=${spreadsheetId}&row=${contact.rowIndex}`;
+          const trackingPixelUrl = `${publicBaseUrl}/api/track?email=${encodeURIComponent(recipientEmail)}&spreadsheetId=${spreadsheetId}&row=${contact.rowIndex}`;
           compiledBody += `<br/><img src="${trackingPixelUrl}" width="16" height="16" style="vertical-align:middle;border-radius:3px;" alt="" title="" referrerPolicy="no-referrer" />`;
         }
 

@@ -1,5 +1,12 @@
+import dotenv from "dotenv";
+// Load server-side env vars in local dev (Coolify injects them directly in
+// production). Without this, GOOGLE_SERVICE_ACCOUNT_KEY / APP_URL defined in
+// .env.local are silently invisible to the Express process.
+dotenv.config({ path: [".env.local", ".env"], quiet: true });
+
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { updateSheetRowAsServiceAccount } from "./src/lib/sheets-server";
 
@@ -15,6 +22,34 @@ let trackedOpens: TrackEvent[] = [];
 
 // In-memory buffer of unsubscribe requests
 let unsubscribedEmails: { email: string; spreadsheetId: string; row: string; unsubscribedAt: string }[] = [];
+
+// Best-effort persistence of the event buffers, so opens/unsubscribes captured
+// while nobody has the CRM open in a browser survive a server restart. On
+// Coolify this only spans restarts within the same container unless the data
+// dir is volume-mounted — the Service Account direct write remains the primary
+// durable path; this file is the fallback for the browser-consumed buffer.
+const DATA_DIR = process.env.TRACKING_DATA_DIR || path.join(process.cwd(), "data");
+const EVENTS_FILE = path.join(DATA_DIR, "tracking-events.json");
+
+function loadPersistedEvents() {
+  try {
+    const raw = fs.readFileSync(EVENTS_FILE, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.trackedOpens)) trackedOpens = parsed.trackedOpens;
+    if (Array.isArray(parsed.unsubscribedEmails)) unsubscribedEmails = parsed.unsubscribedEmails;
+  } catch {
+    // Missing or corrupt file: start with empty buffers.
+  }
+}
+
+function persistEvents() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(EVENTS_FILE, JSON.stringify({ trackedOpens, unsubscribedEmails }), "utf-8");
+  } catch (err) {
+    console.warn("[server] Não foi possível persistir eventos de rastreamento em disco:", err);
+  }
+}
 
 const LEGAL_PAGE_STYLE = `
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 720px; margin: 0 auto; padding: 48px 24px; color: #1f2937; line-height: 1.6; }
@@ -88,7 +123,18 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  loadPersistedEvents();
+
   app.use(express.json());
+
+  // API Route: Public runtime config for the frontend. APP_URL is the public
+  // domain of the deployed service — tracking pixel and unsubscribe links in
+  // outgoing emails must ALWAYS point at it, never at window.location.origin,
+  // otherwise emails sent from a localhost/dev session carry links the lead
+  // can never reach (opens would silently never be recorded for those sends).
+  app.get("/api/config", (req, res) => {
+    res.json({ appUrl: (process.env.APP_URL || "").trim().replace(/\/+$/, "") });
+  });
 
   // API Route: Tracking pixel
   app.get("/api/track", (req, res) => {
@@ -112,6 +158,7 @@ async function startServer() {
           row: rowStr,
           openedAt: new Date().toISOString(),
         });
+        persistEvents();
       }
 
       // Best-effort direct write to the sheet via Service Account, so opens are
@@ -160,6 +207,7 @@ async function startServer() {
           row: rowStr,
           unsubscribedAt: new Date().toISOString(),
         });
+        persistEvents();
       }
 
       if (!isNaN(rowIndex)) {
@@ -204,6 +252,7 @@ async function startServer() {
     } else {
       trackedOpens = [];
     }
+    persistEvents();
     res.json({ success: true });
   });
 

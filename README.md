@@ -28,8 +28,22 @@ Veja [.env.example](.env.example) para a lista completa. Resumo:
 
 | Variável | Descrição |
 |---|---|
-| `APP_URL` | URL pública onde a aplicação está hospedada |
+| `APP_URL` | URL pública onde a aplicação está hospedada. Os links de pixel de abertura e descadastro embutidos nos e-mails são montados a partir dela |
+| `GOOGLE_SERVICE_ACCOUNT_KEY` | JSON da Service Account do Google (em uma linha). **Necessária para o rastreamento de abertura ("Abertura") funcionar 24/7** — sem ela, aberturas só são gravadas enquanto alguém estiver com o CRM aberto no navegador |
+| `TRACKING_DATA_DIR` | (Opcional) Diretório onde o servidor persiste o buffer de eventos de abertura/descadastro. Padrão: `./data` |
 | `VITE_FIREBASE_*` | Configuração do projeto Firebase (Auth/Google OAuth) |
+
+### Configurando a Service Account (rastreamento de abertura)
+
+O pixel de abertura (`/api/track`) grava a coluna "Abertura" diretamente na planilha no momento em que o lead abre o e-mail — mesmo sem ninguém com o CRM aberto. Para isso funcionar:
+
+1. No [Google Cloud Console](https://console.cloud.google.com), no mesmo projeto do OAuth, acesse **IAM & Admin > Service Accounts** e crie uma Service Account (ex.: `dsa-crm-tracker`).
+2. Ative a **Google Sheets API** no projeto (APIs & Services > Library).
+3. Na Service Account, crie uma chave em **Keys > Add key > JSON** e baixe o arquivo.
+4. **Compartilhe a planilha do CRM** com o e-mail da Service Account (campo `client_email` do JSON, algo como `dsa-crm-tracker@<projeto>.iam.gserviceaccount.com`) com permissão de **Editor**.
+5. No Coolify, defina a variável de ambiente de runtime `GOOGLE_SERVICE_ACCOUNT_KEY` com o conteúdo completo do JSON em uma única linha.
+
+Sem essa variável o servidor loga um aviso `[sheets-server] GOOGLE_SERVICE_ACCOUNT_KEY não está definida` e opera em modo degradado (aberturas dependem de um navegador aberto para serem sincronizadas).
 
 ## Build e deploy em produção
 
