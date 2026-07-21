@@ -266,26 +266,47 @@ export default function BatchSendTab({
 
         let compiledBody = parseTemplate(bodyHtml, contact);
 
+        const unsubscribeUrl = `${window.location.origin}/api/unsubscribe?email=${encodeURIComponent(recipientEmail)}&spreadsheetId=${spreadsheetId}&row=${contact.rowIndex}`;
+
         if (!disableTracker) {
-          // Inject invisible tracking pixel (loads /api/track from our server!)
+          // Small, genuinely visible open indicator (loads /api/track from our
+          // server). Kept as a real, rendered image rather than a display:none
+          // 1x1 - hidden remote images are the pattern spam filters key on, a
+          // legitimately-sized visible image is not.
           const trackingPixelUrl = `${window.location.origin}/api/track?email=${encodeURIComponent(recipientEmail)}&spreadsheetId=${spreadsheetId}&row=${contact.rowIndex}`;
-          compiledBody += `<br/><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;width:1px;height:1px;" alt="" referrerPolicy="no-referrer" />`;
+          compiledBody += `<br/><img src="${trackingPixelUrl}" width="16" height="16" style="vertical-align:middle;border-radius:3px;" alt="" title="" referrerPolicy="no-referrer" />`;
         }
 
-        // Inject invisible DSA identification tag. Includes the recipient email
-        // alongside the row so a reply can only be matched back to THIS specific
-        // send — a row number alone can be reused by a different lead later and
-        // stale test emails would otherwise get attributed to the wrong row.
-        compiledBody += `<div style="display:none;color:transparent;font-size:0px;line-height:0;opacity:0;">[DSA-ID:${contact.rowIndex}:${recipientEmail.toLowerCase()}]</div>`;
+        // Visible unsubscribe footer, paired with the List-Unsubscribe header
+        // sent below - required signal for bulk-looking mail deliverability.
+        compiledBody += `<br/><hr style="border:0;border-top:1px solid #eee;margin:20px 0;" /><p style="font-size:11px;color:#999;">${
+          locale === "pt"
+            ? `Não deseja mais receber estes e-mails? <a href="${unsubscribeUrl}" style="color:#999;">Cancelar inscrição</a>.`
+            : `Don't want to receive these emails? <a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a>.`
+        }</p>`;
 
-        // Send email via Gmail API
+        // Send email via Gmail API. The DSA row/recipient correlation id now
+        // travels as a custom header instead of hidden body text — a reply can
+        // only be matched back to THIS specific send since it includes the
+        // recipient email alongside the row (a row number alone can be reused
+        // by a different lead later and stale test emails would otherwise get
+        // attributed to the wrong row).
         await sendGmailMessage(
           recipientEmail,
           personalSubject,
           compiledBody,
           selectedAlias,
           aliasName,
+          `${contact.rowIndex}:${recipientEmail.toLowerCase()}`,
+          unsubscribeUrl,
         );
+
+        // Space out sends so a batch doesn't look like a rapid-fire bulk burst
+        // from the same account — a strong behavioral spam signal on its own,
+        // independent of content.
+        if (i < selectedContacts.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+        }
 
         // Update Sheet Row Status to 'waiting on them' and write DSA notes
         const notesWithDate = contact.notes

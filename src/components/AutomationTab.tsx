@@ -406,10 +406,23 @@ export default function AutomationTab({
           <p>Best regards,<br/>Partnership Team</p>
         `;
 
-      const followUpBodyWithTag =
+      const unsubscribeUrl = `${window.location.origin}/api/unsubscribe?email=${encodeURIComponent(recipient)}&spreadsheetId=${spreadsheetId}&row=${contact.rowIndex}`;
+      const followUpBodyWithFooter =
         followUpBody +
-        `<br/><div style="display:none;color:transparent;font-size:0px;line-height:0;opacity:0;">[DSA-ID:${contact.rowIndex}:${recipient.toLowerCase()}]</div>`;
-      await sendGmailMessage(recipient, followUpSubject, followUpBodyWithTag);
+        `<br/><hr style="border:0;border-top:1px solid #eee;margin:20px 0;" /><p style="font-size:11px;color:#999;">${
+          locale === "pt"
+            ? `Não deseja mais receber estes e-mails? <a href="${unsubscribeUrl}" style="color:#999;">Cancelar inscrição</a>.`
+            : `Don't want to receive these emails? <a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a>.`
+        }</p>`;
+      await sendGmailMessage(
+        recipient,
+        followUpSubject,
+        followUpBodyWithFooter,
+        undefined,
+        undefined,
+        `${contact.rowIndex}:${recipient.toLowerCase()}`,
+        unsubscribeUrl,
+      );
 
       const updatedNotes = contact.notes
         ? `${contact.notes}\n[${locale === "pt" ? "Follow-up Automático Enviado em" : "Automatic Follow-up Sent on"} ${todayStr}]`

@@ -693,13 +693,15 @@ export async function sendGmailMessage(
   subject: string,
   bodyHtml: string,
   fromEmail?: string,
-  fromName?: string
+  fromName?: string,
+  dsaId?: string,
+  unsubscribeUrl?: string,
 ) {
   const utf8Subject = `=?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
-  
+
   // Format From header based on alias
   const fromHeader = fromEmail
-    ? fromName 
+    ? fromName
       ? `From: "${fromName}" <${fromEmail}>`
       : `From: ${fromEmail}`
     : "";
@@ -711,6 +713,16 @@ export async function sendGmailMessage(
     "MIME-Version: 1.0",
     "Content-Type: text/html; charset=utf-8",
     "Content-Transfer-Encoding: base64",
+    // Internal row/recipient correlation id, carried as a header instead of a
+    // hidden HTML block in the body - avoids the "invisible text" cloaking
+    // pattern spam filters flag, since custom X- headers aren't scanned as
+    // rendered content.
+    dsaId ? `X-DSA-ID: ${dsaId}` : "",
+    // List-Unsubscribe (+ Post variant) lets Gmail/inbox providers surface a
+    // native unsubscribe action, which is a strong deliverability signal for
+    // bulk-looking mail. One-click semantics per RFC 8058.
+    unsubscribeUrl ? `List-Unsubscribe: <${unsubscribeUrl}>` : "",
+    unsubscribeUrl ? `List-Unsubscribe-Post: List-Unsubscribe=One-Click` : "",
   ].filter(line => line !== "");
 
   // Encode the body itself as base64 (UTF-8 safe) and wrap at 76 chars per

@@ -13,6 +13,9 @@ interface TrackEvent {
 // In-memory buffer for tracking events
 let trackedOpens: TrackEvent[] = [];
 
+// In-memory buffer of unsubscribe requests
+let unsubscribedEmails: { email: string; spreadsheetId: string; row: string; unsubscribedAt: string }[] = [];
+
 const LEGAL_PAGE_STYLE = `
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 720px; margin: 0 auto; padding: 48px 24px; color: #1f2937; line-height: 1.6; }
   h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
@@ -136,6 +139,43 @@ async function startServer() {
     });
     res.end(buf);
   });
+
+  // API Route: One-click unsubscribe (RFC 8058 List-Unsubscribe-Post target,
+  // also reachable via a plain GET link in the email footer).
+  const handleUnsubscribe = (req: express.Request, res: express.Response) => {
+    const { email, spreadsheetId, row } = req.query;
+    if (email && spreadsheetId && row) {
+      const emailStr = String(email);
+      const sheetIdStr = String(spreadsheetId);
+      const rowStr = String(row);
+      const rowIndex = parseInt(rowStr, 10);
+
+      const exists = unsubscribedEmails.some(
+        (u) => u.email === emailStr && u.spreadsheetId === sheetIdStr && u.row === rowStr
+      );
+      if (!exists) {
+        unsubscribedEmails.push({
+          email: emailStr,
+          spreadsheetId: sheetIdStr,
+          row: rowStr,
+          unsubscribedAt: new Date().toISOString(),
+        });
+      }
+
+      if (!isNaN(rowIndex)) {
+        updateSheetRowAsServiceAccount(sheetIdStr, "batches", rowIndex, {
+          Status: "Unsubscribed",
+        }).catch((err) => {
+          console.error("[api/unsubscribe] Falha ao gravar descadastro diretamente na planilha:", err);
+        });
+      }
+    }
+    res.type("html").send(
+      `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8" /><title>Descadastro</title></head><body style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 80px auto; text-align: center; color: #1f2937;"><h2>Você foi descadastrado(a)</h2><p>Não enviaremos mais e-mails para este endereço a partir deste CRM.</p></body></html>`
+    );
+  };
+  app.get("/api/unsubscribe", handleUnsubscribe);
+  app.post("/api/unsubscribe", handleUnsubscribe);
 
   // API Route: Get tracked opens
   app.get("/api/events", (req, res) => {
