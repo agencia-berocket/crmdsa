@@ -272,8 +272,11 @@ export default function BatchSendTab({
           compiledBody += `<br/><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;width:1px;height:1px;" alt="" referrerPolicy="no-referrer" />`;
         }
 
-        // Inject invisible DSA identification tag
-        compiledBody += `<div style="display:none;color:transparent;font-size:0px;line-height:0;opacity:0;">[DSA-ID:${contact.rowIndex}]</div>`;
+        // Inject invisible DSA identification tag. Includes the recipient email
+        // alongside the row so a reply can only be matched back to THIS specific
+        // send — a row number alone can be reused by a different lead later and
+        // stale test emails would otherwise get attributed to the wrong row.
+        compiledBody += `<div style="display:none;color:transparent;font-size:0px;line-height:0;opacity:0;">[DSA-ID:${contact.rowIndex}:${recipientEmail.toLowerCase()}]</div>`;
 
         // Send email via Gmail API
         await sendGmailMessage(

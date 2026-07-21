@@ -246,6 +246,66 @@ export default function App() {
     }
   };
 
+  // Shared Google Calendar → Sheet confirmation sync. Scans upcoming (and
+  // recent past) events and mirrors each lead's RSVP into "Meeting
+  // Confirmation" / "booked time". Returns how many rows were updated.
+  const syncCalendarConfirmations = async (
+    currentBatches: BatchContact[],
+  ): Promise<number> => {
+    const calendarEvents = await fetchCalendarMeetings();
+    if (calendarEvents.length === 0) return 0;
+
+    let updatedCount = 0;
+    for (const contact of currentBatches) {
+      const contactEmail = (contact.email || "").toLowerCase().trim();
+      if (!contactEmail.includes("@")) continue;
+
+      const candidates = calendarEvents.filter(
+        (evt) => evt.email === contactEmail,
+      );
+      if (candidates.length === 0) continue;
+
+      // Only sync CRM meetings: either the event carries the dsaCrm marker,
+      // or the lead's row already records a CRM-scheduled meeting (covers
+      // invites sent before the marker existed). A personal event that merely
+      // shares an attendee's email never leaks into the sheet.
+      const rowHasCrmMeeting = !!(
+        (contact.meetingInvitationSentOn || "").trim() ||
+        (contact.bookedTime || "").trim() ||
+        (contact.statusMeetings || "").toLowerCase().trim() === "scheduled"
+      );
+      // Events arrive ordered by start time; prefer the latest CRM-marked one.
+      const newestFirst = [...candidates].reverse();
+      const match =
+        newestFirst.find((evt) => evt.isDsaCrm) ||
+        (rowHasCrmMeeting ? newestFirst[0] : undefined);
+      if (!match) continue;
+
+      const confirmationLabel = mapConfirmationStatusLabel(
+        match.responseStatus,
+        locale === "pt" ? "pt" : "en",
+      );
+
+      const updates: { [key: string]: string } = {};
+      if ((contact.bookedTime || "").trim() !== match.startTime) {
+        updates["booked time"] = match.startTime;
+      }
+      if ((contact.meetingConfirmationStatus || "").trim() !== confirmationLabel) {
+        updates["Meeting Confirmation"] = confirmationLabel;
+      }
+      const statusMeetings = (contact.statusMeetings || "").toLowerCase().trim();
+      if (statusMeetings !== "scheduled" && statusMeetings !== "completed" && statusMeetings !== "done") {
+        updates["status meetings"] = "Scheduled";
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await updateSheetRow(spreadsheetId, "batches", contact.rowIndex, updates);
+        updatedCount++;
+      }
+    }
+    return updatedCount;
+  };
+
   // Background Automatic Sync for email opens and email replies (automatic tracking)
   const runAutomaticSync = async (
     currentBatches: BatchContact[],
@@ -362,6 +422,23 @@ export default function App() {
             }
           }
         }
+      }
+
+      // 3. Check Google Calendar RSVP status for scheduled meetings, so
+      // "Meeting Confirmation" flips from Pendente to Confirmada/Recusada
+      // automatically once the lead responds to the invite — no manual sync
+      // click required. Errors here (e.g. missing Calendar scope) must never
+      // break the opens/replies sync above.
+      try {
+        const calendarUpdates = await syncCalendarConfirmations(currentBatches);
+        if (calendarUpdates > 0) {
+          console.log(
+            `[AutoSync] Synced ${calendarUpdates} meeting confirmation(s) from Google Calendar.`,
+          );
+          hasUpdates = true;
+        }
+      } catch (calErr) {
+        console.warn("[AutoSync] Calendar confirmation sync skipped:", calErr);
       }
 
       // If updates were written to the sheet in the background, reload the clean data silently
@@ -517,41 +594,9 @@ export default function App() {
         setCalendarSyncResult(null);
 
         try {
-          const calendarEvents = await fetchCalendarMeetings();
-          let matchedCount = 0;
-
-          // Meetings now live natively on the Lead record (batches tab) — sync
-          // booked time and confirmation status directly from Calendar responses.
-          for (const contact of batchesData) {
-            const contactEmail = (contact.email || "").toLowerCase();
-            if (!contactEmail) continue;
-
-            const match = calendarEvents.find(
-              (evt) => evt.email.toLowerCase() === contactEmail,
-            );
-            if (match) {
-              const confirmationLabel = mapConfirmationStatusLabel(
-                match.responseStatus,
-                locale === "pt" ? "pt" : "en",
-              );
-              const needsBookedUpdate = contact.bookedTime !== match.startTime;
-              const needsConfirmationUpdate = contact.meetingConfirmationStatus !== confirmationLabel;
-
-              if (needsBookedUpdate || needsConfirmationUpdate) {
-                await updateSheetRow(
-                  spreadsheetId,
-                  "batches",
-                  contact.rowIndex,
-                  {
-                    "booked time": match.startTime,
-                    "status meetings": "Scheduled",
-                    "Meeting Confirmation": confirmationLabel,
-                  },
-                );
-                matchedCount++;
-              }
-            }
-          }
+          // Meetings live natively on the Lead record (batches tab) — mirror
+          // booked time and RSVP confirmation directly from Calendar responses.
+          const matchedCount = await syncCalendarConfirmations(batchesData);
 
           setCalendarSyncResult(
             locale === "pt"

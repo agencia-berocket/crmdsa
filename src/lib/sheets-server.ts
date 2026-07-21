@@ -113,10 +113,22 @@ export async function updateSheetRowAsServiceAccount(
     if (colIndex === -1) {
       const patterns = COLUMN_PATTERNS_MAP[normalized];
       if (patterns) {
-        colIndex = headers.findIndex((h) => {
-          const lowerH = h.toLowerCase().trim();
-          return patterns.some((p) => lowerH === p.toLowerCase() || lowerH.includes(p.toLowerCase()));
-        });
+        // Patterns are tried IN ORDER, exact matches first, mirroring
+        // updateSheetRow in src/lib/google-api.ts — a high-priority pattern
+        // always wins before a looser one can hit an unrelated header.
+        for (const p of patterns) {
+          colIndex = headers.findIndex((h) => h.toLowerCase().trim() === p.toLowerCase());
+          if (colIndex !== -1) break;
+        }
+        if (colIndex === -1) {
+          for (const p of patterns) {
+            colIndex = headers.findIndex((h) => {
+              const lowerH = h.toLowerCase().trim();
+              return !lowerH.startsWith("#") && lowerH.includes(p.toLowerCase());
+            });
+            if (colIndex !== -1) break;
+          }
+        }
       }
     }
 

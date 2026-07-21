@@ -636,9 +636,12 @@ export default function CRMTable({
       const sheetName = "batches";
       const meetingUpdates: { [key: string]: string } = {
         "Meeting Invitation Sent On": nowStr,
-        "Meeting Date/Time": scheduledStr,
         "booked time": scheduledStr,
         "status meetings": "Scheduled",
+        // Initial RSVP state: the invite was just sent, so the confirmation
+        // starts as pending. The background calendar sync flips it to
+        // Confirmada/Recusada as soon as the lead responds to the invite.
+        "Meeting Confirmation": locale === "pt" ? "Pendente" : "Pending",
       };
       await updateSheetRow(spreadsheetId, sheetName, selectedRow.rowIndex, meetingUpdates);
 
@@ -701,7 +704,10 @@ export default function CRMTable({
         updates["student organization"] = editedStudentOrg;
         updates["name"] = editedName;
         updates["email"] = editedEmail;
-        updates["email sent"] = editedEmailSent;
+        // The drawer field is the dispatch date ("Data do Envio") — write it to
+        // the "Date Sent" column. Never use the key "email sent" here: in this
+        // sheet the "Email Sent" header is the actual address column.
+        updates["date sent"] = editedEmailSent;
         updates["status meetings"] = editedStatusMeetings;
         updates["notes meetings"] = editedNotesMeetings;
       } else {

@@ -74,25 +74,43 @@ export default function AutomationTab({
   // 1. Analyze Follow-up Candidates (sent >= 3 days ago, status is waiting on them)
   useEffect(() => {
     const today = new Date();
-    const candidates = batchesData.filter((contact) => {
-      const status = (contact.status || "").toLowerCase().trim();
-      const isWaiting =
-        status === "waiting on them" || status === "" || !status;
 
-      if (!isWaiting) return false;
+    // The sheet's "Date Sent" column (and the value the app writes on each
+    // send) uses the short "Mon D" format, e.g. "May 28" / "Jul 21", with no
+    // year — assume the current year and roll back one year if that lands in
+    // the future. Full "DD/MM/YYYY" notes stamps are still accepted as fallback.
+    const parseSentDate = (contact: BatchContact): Date | null => {
+      const raw = (contact.emailSent || "").trim();
+      if (raw) {
+        const parsed = new Date(`${raw} ${today.getFullYear()}`);
+        if (!isNaN(parsed.getTime())) {
+          if (parsed.getTime() > today.getTime() + 24 * 60 * 60 * 1000) {
+            parsed.setFullYear(parsed.getFullYear() - 1);
+          }
+          return parsed;
+        }
+      }
 
-      // Extract date from Notes (e.g., "Enviado em DD/MM/YYYY" or "Sent on DD/MM/YYYY")
       const match = (contact.notes || "").match(
         /(?:Enviado em|Sent on) (\d{2})\/(\d{2})\/(\d{4})/,
       );
-      if (!match) return false;
+      if (!match) return null;
+      return new Date(
+        parseInt(match[3]),
+        parseInt(match[2]) - 1,
+        parseInt(match[1]),
+      );
+    };
 
-      const day = parseInt(match[1]);
-      const month = parseInt(match[2]) - 1;
-      const year = parseInt(match[3]);
+    const candidates = batchesData.filter((contact) => {
+      const status = (contact.status || "").toLowerCase().trim();
+      const isWaiting = status === "waiting on them";
+      if (!isWaiting) return false;
 
-      const sentDate = new Date(year, month, day);
-      const diffTime = Math.abs(today.getTime() - sentDate.getTime());
+      const sentDate = parseSentDate(contact);
+      if (!sentDate) return false;
+
+      const diffTime = today.getTime() - sentDate.getTime();
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
       return diffDays >= 3;
@@ -390,7 +408,7 @@ export default function AutomationTab({
 
       const followUpBodyWithTag =
         followUpBody +
-        `<br/><div style="display:none;color:transparent;font-size:0px;line-height:0;opacity:0;">[DSA-ID:${contact.rowIndex}]</div>`;
+        `<br/><div style="display:none;color:transparent;font-size:0px;line-height:0;opacity:0;">[DSA-ID:${contact.rowIndex}:${recipient.toLowerCase()}]</div>`;
       await sendGmailMessage(recipient, followUpSubject, followUpBodyWithTag);
 
       const updatedNotes = contact.notes

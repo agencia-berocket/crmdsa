@@ -150,14 +150,15 @@ export async function fetchBatches(spreadsheetId: string, sheetName = "batches")
       });
     })(),
     email: (() => {
-      // Prioritize an exact match on "#emails" — the actual email address column
-      // in this spreadsheet's real layout. This must win over "Email Sent" (which
-      // despite the name is a sent-status/date marker, not an address).
-      const hashEmailsIdx = headers.findIndex((h) => h.toLowerCase().trim() === "#emails");
-      if (hashEmailsIdx !== -1) return hashEmailsIdx;
+      // In this spreadsheet's real layout the address lives in "Email Sent"
+      // (column H) — verified against the live sheet: 147/160 rows carry an
+      // "@" there. "#emails" (column A) is a numeric row counter, NOT an
+      // address column, so it must never be matched here.
+      const emailSentIdx = headers.findIndex((h) => h.toLowerCase().trim() === "email sent");
+      if (emailSentIdx !== -1) return emailSentIdx;
 
-      // Next, a column literally named "email"/"e-mail" (excluding alerts and
-      // excluding "email sent"/"email sent alert", which are status markers, not addresses).
+      // Next, a column literally named "email"/"e-mail" (excluding alerts,
+      // which are status markers, not addresses).
       const exactEmailIdx = headers.findIndex((h) => {
         const norm = h.toLowerCase().trim();
         return (
@@ -182,10 +183,11 @@ export async function fetchBatches(spreadsheetId: string, sheetName = "batches")
       return 7;
     })(),
     emailSent: (() => {
-      // Prioritize exact/fuzzy match for send date column
+      // Send-date column ("Date Sent" / "Data do Envio"). Never "Email Sent" —
+      // that column holds the actual address in this layout.
       const exactSentIdx = headers.findIndex((h) => {
         const norm = h.toLowerCase().trim();
-        return norm === "data de envio" || norm === "data do envio" || norm === "data envio" || norm === "enviado em" || norm === "date sent" || norm === "email sent" || norm === "ultimo envio" || norm === "último envio";
+        return norm === "data de envio" || norm === "data do envio" || norm === "data envio" || norm === "enviado em" || norm === "date sent" || norm === "ultimo envio" || norm === "último envio";
       });
       if (exactSentIdx !== -1) return exactSentIdx;
 
@@ -193,9 +195,9 @@ export async function fetchBatches(spreadsheetId: string, sheetName = "batches")
       // but does NOT contain email / contato / alert / notification keywords
       const dateSentIdx = headers.findIndex((h) => {
         const norm = h.toLowerCase();
-        return (norm.includes("sent") || norm.includes("envio") || norm.includes("data") || norm.includes("date")) && 
+        return (norm.includes("sent") || norm.includes("envio") || norm.includes("data") || norm.includes("date")) &&
                !norm.includes("alert") && !norm.includes("alerta") && !norm.includes("notific") &&
-               (norm !== "email" && norm !== "e-mail" && norm !== "contato");
+               !norm.includes("email") && !norm.includes("e-mail") && !norm.includes("contato");
       });
       return dateSentIdx;
     })(),
@@ -283,13 +285,30 @@ export async function fetchBatches(spreadsheetId: string, sheetName = "batches")
     const row = values[i];
     const valAt = (idx: number) => (idx !== -1 && idx < row.length ? row[idx] || "" : "");
 
+    // Resolve the address from the primary email column; if that cell has no
+    // "@", fall back to any other cell in the row containing one (rows written
+    // by an older buggy version stored the address in "#emails"/column A).
+    // Notes columns are excluded so a stray address quoted in a note never
+    // overrides the record's real contact email.
+    let emailValue = valAt(colIndex.email).trim();
+    if (!emailValue.includes("@")) {
+      const altEmail = row.find(
+        (cell, idx) =>
+          idx !== colIndex.notes &&
+          idx !== colIndex.notesMeetings &&
+          typeof cell === "string" &&
+          cell.includes("@")
+      );
+      if (altEmail) emailValue = altEmail.trim();
+    }
+
     contacts.push({
       rowIndex: i + 1,
       university: valAt(colIndex.university),
       studentOrganization: valAt(colIndex.studentOrganization),
       name: valAt(colIndex.name),
       status: valAt(colIndex.status),
-      email: valAt(colIndex.email),
+      email: emailValue,
       emailSent: valAt(colIndex.emailSent),
       notes: valAt(colIndex.notes),
       emailSentAlert: valAt(colIndex.emailSentAlert),
@@ -424,7 +443,10 @@ export async function updateSheetRow(
     "name": ["name", "nome", "estudante", "aluno"],
     "status": ["status pipeline", "status"],
     "notes": ["note", "anotação", "obs", "observações", "comentário"],
-    "email": ["#emails", "email", "e-mail"],
+    // In this spreadsheet's real layout "Email Sent" (col H) holds the actual
+    // address; "#emails" (col A) is a numeric counter and must never match.
+    "email": ["email sent", "email", "e-mail"],
+    "date sent": ["date sent", "data do envio", "data de envio", "data envio"],
     "data do envio": ["data do envio", "data de envio", "date sent", "data envio"],
     "notif. envio": ["notif. envio", "notificação envio", "alerta envio", "email sent alert"],
     "abertura": ["abertura"],
@@ -442,15 +464,27 @@ export async function updateSheetRow(
     let colIndex = headers.findIndex((h) => h.trim().toLowerCase() === normalized);
 
     // 2. Canonical pattern match — only if the caller used one of the known
-    // canonical keys above. Each key's patterns are unique to that column, so
-    // this cannot collide with another target column.
+    // canonical keys above. Patterns are tried IN ORDER, exact matches first,
+    // so a high-priority pattern ("email sent") always wins before a looser
+    // one ("email") can accidentally hit an unrelated header like "#emails".
     if (colIndex === -1) {
       const patterns = CANONICAL_COLUMN_PATTERNS[normalized];
       if (patterns) {
-        colIndex = headers.findIndex((h) => {
-          const lowerH = h.toLowerCase().trim();
-          return patterns.some((p) => lowerH === p.toLowerCase() || lowerH.includes(p.toLowerCase()));
-        });
+        for (const p of patterns) {
+          colIndex = headers.findIndex((h) => h.toLowerCase().trim() === p.toLowerCase());
+          if (colIndex !== -1) break;
+        }
+        if (colIndex === -1) {
+          for (const p of patterns) {
+            // "#"-prefixed headers ("#emails", "#groups") are numeric counters
+            // in this sheet — never a valid target for a fuzzy match.
+            colIndex = headers.findIndex((h) => {
+              const lowerH = h.toLowerCase().trim();
+              return !lowerH.startsWith("#") && lowerH.includes(p.toLowerCase());
+            });
+            if (colIndex !== -1) break;
+          }
+        }
       }
     }
 
@@ -529,11 +563,11 @@ export async function addBatchLead(
   });
 
   const emailIdx = (() => {
-    // Prioritize an exact match on "#emails" — the actual email address column
-    // in this spreadsheet's real layout, which must win over "Email Sent" (a
-    // sent-status/date marker, not an address).
-    const hashEmailsIdx = headers.findIndex((h) => h.toLowerCase().trim() === "#emails");
-    if (hashEmailsIdx !== -1) return hashEmailsIdx;
+    // The address lives in "Email Sent" (column H) in this spreadsheet's real
+    // layout. "#emails" (column A) is a numeric row counter, NOT an address
+    // column — writing the email there is what originally broke the workflow.
+    const emailSentIdx = headers.findIndex((h) => h.toLowerCase().trim() === "email sent");
+    if (emailSentIdx !== -1) return emailSentIdx;
 
     const exactEmailIdx = headers.findIndex((h) => {
       const norm = h.toLowerCase().trim();
@@ -566,10 +600,37 @@ export async function addBatchLead(
     if (statusIdx !== -1) rowValues[statusIdx] = leadData.status;
     if (notesIdx !== -1) rowValues[notesIdx] = leadData.notes;
     
-    // Note: emailSentIdx (Notif. Envio / Data do Envio) is intentionally left blank here —
-    // it must only be filled after a real email send (see updateSheetRow calls in BatchSendTab).
+    // Note: emailSentIdx (Date Sent) and the notification columns (Notif. Envio /
+    // Abertura / Notif. Retorno) are intentionally left blank here — they must
+    // only be filled after a real send / open / reply event.
     if (emailIdx !== -1) {
       rowValues[emailIdx] = leadData.email || "";
+    }
+
+    // "#emails" (column A) is a numeric row counter in this sheet — continue
+    // the sequence so app-created rows keep the manual numbering intact.
+    const counterIdx = headers.findIndex((h) => h.toLowerCase().trim() === "#emails");
+    if (counterIdx !== -1 && counterIdx !== emailIdx) {
+      try {
+        const counterLetter = (() => {
+          let letter = "";
+          let i = counterIdx;
+          while (i >= 0) {
+            letter = String.fromCharCode((i % 26) + 65) + letter;
+            i = Math.floor(i / 26) - 1;
+          }
+          return letter;
+        })();
+        const counterData = await googleFetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${sheetName}!${counterLetter}2:${counterLetter}`)}`
+        );
+        const numbers = (counterData.values || [])
+          .map((v: string[]) => parseInt((v?.[0] || "").trim(), 10))
+          .filter((n: number) => !isNaN(n));
+        rowValues[counterIdx] = String(numbers.length > 0 ? Math.max(...numbers) + 1 : 1);
+      } catch (err) {
+        console.warn("[addBatchLead] Could not compute next #emails counter, leaving blank:", err);
+      }
     }
   } else {
     // Fallback if sheet is completely empty without headers (creates exactly the standard 8 columns structure)
@@ -787,11 +848,18 @@ export async function searchReplies(contactsEmails: string[]): Promise<{ email: 
       const emailMatch = fromHeader.match(/<([^>]+)>/) || [null, fromHeader];
       const email = (emailMatch[1] || fromHeader).trim().toLowerCase();
       
-      // Check the decoded body for the hidden tag "[DSA-ID:row]"
+      // Check the decoded body for the hidden tag "[DSA-ID:row:email]". The
+      // embedded email must match the actual sender of this reply — a row
+      // number alone can be reused by a different lead later (rows aren't
+      // permanently retired), and a stale test email carrying an old row's tag
+      // would otherwise get misattributed to whichever lead occupies that row
+      // today. Older messages sent before this tag format only carry the row
+      // number ("[DSA-ID:row]") and are intentionally ignored here — they fall
+      // back to the plain email-based match below instead.
       const bodyText = getMessageBody(detail.payload) + " " + (detail.snippet || "");
-      const dsaMatch = bodyText.match(/\[DSA-ID:(\d+)\]/);
-      
-      if (dsaMatch) {
+      const dsaMatch = bodyText.match(/\[DSA-ID:(\d+):([^\]\s]+)\]/);
+
+      if (dsaMatch && dsaMatch[2].toLowerCase() === email) {
         const rowIndex = parseInt(dsaMatch[1]);
         resultsMap.set(email, { email, rowIndex });
       } else if (contactsEmails.map(e => e.toLowerCase()).includes(email)) {
@@ -813,21 +881,29 @@ export async function searchReplies(contactsEmails: string[]): Promise<{ email: 
  * GOOGLE CALENDAR FUNCTIONS
  */
 
-// Fetch active calendar events and link with meeting slots
-export async function fetchCalendarMeetings(): Promise<{ email: string; startTime: string; eventTitle: string; responseStatus: string }[]> {
-  const nowStr = new Date().toISOString();
-  // Fetch events from now onwards
+// Fetch calendar events (past 60 days onward) with each attendee's RSVP status.
+// Events the CRM itself created carry the dsaCrm private marker (see
+// createCalendarEvent) and are flagged via isDsaCrm; older CRM invites sent
+// before the marker existed don't have it, so we intentionally do NOT filter
+// server-side — the caller decides which events count (isDsaCrm, or the lead's
+// row already shows a CRM-scheduled meeting). The 60-day lookback matters:
+// with timeMin=now, an invite whose meeting time has passed would vanish from
+// the sync and its confirmation would stay frozen (e.g. stuck on "Pendente").
+export async function fetchCalendarMeetings(): Promise<{ email: string; startTime: string; eventTitle: string; responseStatus: string; isDsaCrm: boolean }[]> {
+  const timeMin = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
   const data = await googleFetch(
-    `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(nowStr)}&singleEvents=true&orderBy=startTime&maxResults=50`
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&singleEvents=true&orderBy=startTime&maxResults=250`
   );
 
   const events = data.items || [];
-  const calendarMeetings: { email: string; startTime: string; eventTitle: string; responseStatus: string }[] = [];
+  const calendarMeetings: { email: string; startTime: string; eventTitle: string; responseStatus: string; isDsaCrm: boolean }[] = [];
 
   for (const event of events) {
+    if (event.status === "cancelled") continue;
     const attendees: any[] = event.attendees || [];
     const startTime = event.start?.dateTime || event.start?.date || "";
     const eventTitle = event.summary || "Reunião de Prospecção";
+    const isDsaCrm = event.extendedProperties?.private?.dsaCrm === "true";
 
     for (const attendee of attendees) {
       if (attendee.email && !attendee.self) {
@@ -842,6 +918,7 @@ export async function fetchCalendarMeetings(): Promise<{ email: string; startTim
           }),
           eventTitle,
           responseStatus: attendee.responseStatus || "needsAction",
+          isDsaCrm,
         });
       }
     }
@@ -932,6 +1009,10 @@ export async function createCalendarEvent(params: {
         start: { dateTime: start.toISOString() },
         end: { dateTime: end.toISOString() },
         attendees: [{ email: attendeeEmail }],
+        // Marks this event as CRM-originated so fetchCalendarMeetings only
+        // syncs confirmations for meetings the CRM itself scheduled, never a
+        // personal/unrelated event that happens to share an attendee's email.
+        extendedProperties: { private: { dsaCrm: "true" } },
       }),
     }
   );
